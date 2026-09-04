@@ -218,7 +218,8 @@ gtwr.cv<-function(bw, X, Y, kernel="bisquare",adaptive=FALSE, dp.locat, obs.tv, 
 
 ####Calculate the AICc with a given bandwidth
 ##Author: Binbin Lu
-gtwr.aic<-function(bw, X, Y, kernel="bisquare",adaptive=FALSE, dp.locat, obs.tv, p=2, theta=0, longlat=F,lamda=0.05,t.units = "auto",ksi=0, st.dMat,verbose=T)
+gtwr.aic<-function(bw, X, Y, kernel="bisquare",adaptive=FALSE, dp.locat, obs.tv, p=2, theta=0, longlat=F,lamda=0.05,t.units = "auto",ksi=0, st.dMat,verbose=T,
+                   aicc.rss.floor = 1e-8, aicc.enp.margin = 1)
 {
    dp.n<-length(dp.locat[,1])
    var.n <- ncol(X)
@@ -259,12 +260,26 @@ gtwr.aic<-function(bw, X, Y, kernel="bisquare",adaptive=FALSE, dp.locat, obs.tv,
     }
   }
 
-  if (!any(is.infinite(S)))
-  {
-     AICc<-AICc(Y,X,betas, S)
+  tr.S <- sum(diag(S))
+  bad  <- any(is.infinite(S)) || anyNA(S) || !is.finite(tr.S) ||
+          tr.S >= (dp.n - 2 - aicc.enp.margin)
+  if (bad) {
+    AICc <- Inf
+  } else {
+    yhat     <- rowSums(X * betas)
+    residual <- as.numeric(Y - yhat)
+    rss      <- sum(residual^2)
+    gTSS     <- sum((Y - mean(Y))^2)
+    if (!is.finite(rss) || !is.finite(gTSS) || gTSS == 0) {
+      AICc <- Inf
+    } else {
+      rss.eff <- max(rss, aicc.rss.floor * gTSS)
+      sigma2  <- rss.eff / dp.n
+      AICc <- dp.n * log(sigma2) + dp.n * log(2 * pi) +
+              dp.n * ((dp.n + tr.S) / (dp.n - 2 - tr.S))
+      if (!is.finite(AICc)) AICc <- Inf
+    }
   }
-  else
-    AICc<-Inf
   if(verbose)
   {
     if(adaptive)

@@ -1,2 +1,11 @@
 GWmodel_*.tar.gz
 debug.log
+.DS_Store
+.Rhistory
+.Rproj.user/
+*.Rproj
+GWmodel.Rcheck/
+bench/results.rds
+bench/parallel_results.rds
+bench/plots/__pycache__/
+tests/__pycache__/
