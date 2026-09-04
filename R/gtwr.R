@@ -156,8 +156,8 @@ gtwr<- function(formula, data, regression.points, obs.tv, reg.tv, st.bw, kernel=
   betas <-matrix(nrow=rp.n, ncol=var.n)
   betas.SE <-matrix(nrow=rp.n, ncol=var.n)
   betas.TV <-matrix(nrow=rp.n, ncol=var.n)
-  ##S: hatmatrix
-  S<-matrix(nrow=dp.n,ncol=dp.n)
+  ##S: hatmatrix -- never materialised. Every use of S below is a
+  ##   reduction over its rows, accumulated by the chunked dispatch.
   #C.M<-matrix(nrow=dp.n,ncol=dp.n)
   idx1 <- match("(Intercept)", colnames(x))
   if(!is.na(idx1))
@@ -197,25 +197,77 @@ gtwr<- function(formula, data, regression.points, obs.tv, reg.tv, st.bw, kernel=
     if (dim.stdMat[1]!=dp.n||dim.stdMat[2]!=rp.n)
       stop("Dimensions of spatio-temporal distance matrix sdMat are not correct")
   }
-  fit_at <- function(i) {
-    st.disti <- if (DM.given) st.dMat[, i]
-                else st.dist(dp.locat, rp.locat, obs.tv, reg.tv, focus = i,
-                             p = p, theta = theta, longlat = F, lamda = longlat,
-                             t.units = t.units, ksi = ksi)
-    .gtwr_point_fit(i, x, y, st.disti, st.bw, kernel, adaptive, hatmatrix)
+  # Local fits are dispatched in contiguous chunks rather than one point at a
+  # time. Two things fall out of that:
+  #   * each worker is handed only its own columns of st.dMat, so per-worker
+  #     memory is 8*n^2/cores rather than 8*n^2 -- broadcasting the whole
+  #     matrix to every worker is what exhausted RAM on large fits;
+  #   * the hat matrix is never materialised. Every downstream use of S is a
+  #     reduction over its rows -- diag(S), sum(S^2), S %*% y, colSums(S^2) --
+  #     so each chunk accumulates those and returns O(n) numbers instead of an
+  #     n x n block travelling back over a socket.
+  # fit_chunk is given an environment holding only the small objects it needs;
+  # st.dMat is deliberately absent so it cannot ride along inside the closure.
+  # mget() also forces the formals, which a PSOCK worker could not resolve.
+  w_env <- list2env(mget(c("x", "y", "st.bw", "kernel", "adaptive", "hatmatrix",
+                           "dp.n", "DM.given", "dp.locat", "rp.locat", "obs.tv",
+                           "reg.tv", "p", "theta", "longlat", "lamda", "t.units", "ksi")),
+                    parent = globalenv())
+  fit_chunk <- function(idx, dcols) {
+    m <- length(idx); nb <- ncol(x)
+    o <- list(idx   = idx,
+              betas = matrix(NA_real_, m, nb),
+              se    = if (hatmatrix) matrix(NA_real_, m, nb) else NULL,
+              sdiag = if (hatmatrix) numeric(m) else NULL,
+              yhat  = if (hatmatrix) numeric(m) else NULL,
+              colS2 = if (hatmatrix) numeric(dp.n) else NULL,
+              sumS2 = 0, nfail = 0L, emsg = NULL)
+    for (k in seq_len(m)) {
+      i <- idx[k]
+      st.disti <- if (DM.given) dcols[, k]
+                  else st.dist(dp.locat, rp.locat, obs.tv, reg.tv, focus = i,
+                               p = p, theta = theta, longlat = longlat, lamda = lamda,
+                               t.units = t.units, ksi = ksi)
+      f <- .gtwr_point_fit(i, x, y, st.disti, st.bw, kernel, adaptive, hatmatrix)
+      if (!is.null(f$.failed)) {
+        o$nfail <- o$nfail + 1L
+        if (is.null(o$emsg)) o$emsg <- f$.failed
+      }
+      o$betas[k, ] <- f$beta
+      if (hatmatrix) {
+        sr <- f$S_row
+        o$se[k, ]  <- f$se_sq
+        o$sdiag[k] <- sr[i]
+        o$yhat[k]  <- sum(sr * y)
+        sr2        <- sr * sr
+        o$sumS2    <- o$sumS2 + sum(sr2)
+        o$colS2    <- o$colS2 + sr2
+      }
+    }
+    o
   }
-  fits <- .gtwr_dispatch(fit_at, rp.n, cores, verbose)
-  failed_idx <- which(vapply(fits, function(f) !is.null(f$.failed), logical(1)))
-  if (length(failed_idx) > 0L) {
-    ex <- fits[[failed_idx[1]]]$.failed
+  environment(fit_chunk) <- w_env
+  slice_fn <- if (DM.given) function(ix) st.dMat[, ix, drop = FALSE]
+              else function(ix) NULL
+  chunk_res <- .gtwr_dispatch_chunks(fit_chunk, rp.n, cores, verbose, slice_fn)
+  nfail <- sum(vapply(chunk_res, function(r) r$nfail, integer(1)))
+  if (nfail > 0L) {
+    ex <- Filter(Negate(is.null), lapply(chunk_res, function(r) r$emsg))[[1]]
     warning(sprintf("Local fit failed at %d / %d regression points (bandwidth too small or design singular). First error: %s",
-                    length(failed_idx), rp.n, ex))
+                    nfail, rp.n, ex))
   }
-  for (i in seq_len(rp.n)) {
-    betas[i, ] <- fits[[i]]$beta
+  if (hatmatrix) {
+    s.diag <- numeric(dp.n); yhat.v <- numeric(dp.n)
+    colS2  <- numeric(dp.n); sumS2  <- 0
+  }
+  for (r in chunk_res) {
+    betas[r$idx, ] <- r$betas
     if (hatmatrix) {
-      S[i, ]        <- fits[[i]]$S_row
-      betas.SE[i, ] <- fits[[i]]$se_sq
+      betas.SE[r$idx, ] <- r$se
+      s.diag[r$idx]     <- r$sdiag
+      yhat.v[r$idx]     <- r$yhat
+      colS2             <- colS2 + r$colS2
+      sumS2             <- sumS2 + r$sumS2
     }
   }
   ########################Diagnostic information
@@ -223,12 +275,17 @@ gtwr<- function(formula, data, regression.points, obs.tv, reg.tv, st.bw, kernel=
   GTW.diagnostic<-NA
   if (hatmatrix)
   {
-    tr.S<-sum(diag(S))
-    tr.StS<-sum(S^2)
-    Q<-t(diag(dp.n)-S)%*%(diag(dp.n)-S)
-    RSS.gw<-t(y)%*%Q%*%y
-    yhat<-S%*%y
+    # S was never formed; the chunked dispatch accumulated its reductions.
+    # With A = I - S,  y'A'A y == ||A y||^2 == sum(residual^2)  and
+    # diag(A'A) == colSums(S^2) - 2*diag(S) + 1, so RSS and the leverage
+    # terms cost O(n) here. The original built Q = A'A explicitly: an O(n^3)
+    # matmul plus three n x n matrices. RSS.gw is kept as a 1x1 matrix so
+    # downstream code indexing it as such still works.
+    tr.S   <- sum(s.diag)
+    tr.StS <- sumS2
+    yhat<-yhat.v
     residual<-y-yhat
+    RSS.gw<-matrix(sum(residual^2), 1L, 1L)
     edf.raw <- dp.n - 2 * tr.S + tr.StS
     if (!is.finite(edf.raw) || edf.raw <= aicc.enp.margin) {
       warning(sprintf("Effective degrees of freedom (%.2f) at or below %g; standard errors set to NA.",
@@ -239,7 +296,7 @@ gtwr<- function(formula, data, regression.points, obs.tv, reg.tv, st.bw, kernel=
       betas.TV[]    <- NA_real_
     } else {
       sigma.hat1    <- RSS.gw / edf.raw
-      q.diag        <- diag(Q)
+      q.diag        <- colS2 - 2 * s.diag + 1
       Stud_residual <- as.numeric(residual) / sqrt(as.numeric(sigma.hat1) * q.diag)
       betas.SE      <- sqrt(as.numeric(sigma.hat1) * betas.SE)
       betas.TV      <- betas / betas.SE
@@ -639,27 +696,42 @@ st.dist <- function(dp.locat, rp.locat, obs.tv, reg.tv,focus=0, p=2, theta=0, lo
    }
    else
    {
-      if(rp.given)
-      {
-        S  <- s.dMat[coord.dp.idx, coord.rp.idx]
-        Tm <- t.dMat[uts.obv.idx, uts.reg.idx]
-        finite <- is.finite(Tm)
-        dists[] <- Inf
-        sf <- S[finite]; tf <- Tm[finite]
-        dists[finite] <- lamda*sf + (1-lamda)*tf +
-                         2*sqrt(lamda*(1-lamda)*sf*tf)*cos(ksi)
-      }
-     else
+     # Built one column block at a time. Holding S, Tm, t(Tm), the two logical
+     # masks and the arithmetic temporaries all at n x n peaked at ~57 GB to
+     # produce an 8.6 GB result at n=34013 -- the reason full-size runs could
+     # not start. s.dMat and t.dMat only ever hold unique coordinates and
+     # unique time stamps (2918 and 12 respectively for a London LSOA month
+     # panel), so a block re-expands a small matrix rather than keeping a
+     # second copy of the large one. The arithmetic is left verbatim so the
+     # result is bit-identical to the unblocked version.
+     blk  <- max(1L, min(n.rp, as.integer(ceiling(1e7 / max(1L, n.dp)))))
+     rows <- seq_len(n.dp)
+     for (.start in seq(1L, n.rp, by = blk))
      {
-       S  <- s.dMat[coord.dp.idx, coord.dp.idx]
-       Tm <- t.dMat[uts.obv.idx, uts.obv.idx]
-       lo <- lower.tri(Tm)
-       Tm[lo] <- t(Tm)[lo]
+       cols <- .start:min(.start + blk - 1L, n.rp)
+       m    <- length(cols)
+       if(rp.given)
+       {
+         S  <- s.dMat[coord.dp.idx, coord.rp.idx[cols], drop=FALSE]
+         Tm <- t.dMat[uts.obv.idx, uts.reg.idx[cols], drop=FALSE]
+       }
+       else
+       {
+         S  <- s.dMat[coord.dp.idx, coord.dp.idx[cols], drop=FALSE]
+         # Tm[i,j] <- t.dMat[a[min(i,j)], a[max(i,j)]] reproduces the
+         # lower.tri(Tm) <- t(Tm)[lower.tri(Tm)] symmetrisation exactly,
+         # without ever forming the n x n transpose.
+         I  <- matrix(rows, nrow=n.dp, ncol=m)
+         Cc <- matrix(cols, nrow=n.dp, ncol=m, byrow=TRUE)
+         a  <- uts.obv.idx
+         Tm <- matrix(t.dMat[cbind(a[pmin(I,Cc)], a[pmax(I,Cc)])], n.dp, m)
+       }
        finite <- is.finite(Tm)
-       dists[] <- Inf
+       db <- matrix(Inf, n.dp, m)
        sf <- S[finite]; tf <- Tm[finite]
-       dists[finite] <- lamda*sf + (1-lamda)*tf +
-                        2*sqrt(lamda*(1-lamda)*sf*tf)*cos(ksi)
+       db[finite] <- lamda*sf + (1-lamda)*tf +
+                     2*sqrt(lamda*(1-lamda)*sf*tf)*cos(ksi)
+       dists[, cols] <- db
      }
    }
    dists

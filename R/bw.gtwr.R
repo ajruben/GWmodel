@@ -247,7 +247,11 @@ gtwr.aic<-function(bw, X, Y, kernel="bisquare",adaptive=FALSE, dp.locat, obs.tv,
   }
   ############################################AIC
   ###In this function, the whole hatmatrix is not fully calculated and only the diagonal elements are computed
-  S<-matrix(nrow=dp.n,ncol=dp.n)
+  # Only diag(S) is ever read (see the comment above), so keep just the
+  # diagonal rather than allocating and filling an n x n hat matrix:
+  # that was 8*n^2 bytes per bandwidth evaluation -- 1.6 GB at n=14000 --
+  # rebuilt from scratch at every step of the bandwidth search.
+  s.diag <- rep(NA_real_, dp.n)
   betas <-matrix(nrow=dp.n, ncol=var.n)
   for (i in 1:dp.n)
   {
@@ -261,18 +265,18 @@ gtwr.aic<-function(bw, X, Y, kernel="bisquare",adaptive=FALSE, dp.locat, obs.tv,
     res<- try(gw_reg(X,Y,W.i,TRUE,i))
     if(!inherits(res, "try-error"))
     {
-      S[i,]<-res[[2]]
+      s.diag[i]<-res[[2]][i]
       betas[i,] <- res[[1]]
     }
     else
     {
-      S[i,]<-Inf
+      s.diag[i]<-Inf
       break
     }
   }
 
-  tr.S <- sum(diag(S))
-  bad  <- any(is.infinite(S)) || anyNA(S) || !is.finite(tr.S) ||
+  tr.S <- sum(s.diag)
+  bad  <- any(is.infinite(s.diag)) || anyNA(s.diag) || !is.finite(tr.S) ||
           tr.S >= (dp.n - 2 - aicc.enp.margin)
   if (bad) {
     AICc <- Inf
