@@ -653,27 +653,42 @@ st.dist <- function(dp.locat, rp.locat, obs.tv, reg.tv,focus=0, p=2, theta=0, lo
    else
        dists<-matrix(numeric(n.rp*n.dp),nrow=n.dp)
    ###Remove the duplicated locations
-
+   ucoord.dp <- get.uloat(dp.locat) 
+   coord.dp.idx <- ucoord.dp[[2]]
+   ucoord.dp <- ucoord.dp[[1]]
+   ucoord.rp <- get.uloat(rp.locat) 
+   coord.rp.idx <- ucoord.rp[[2]]
+   ucoord.rp <- ucoord.rp[[1]]
    ######Calculate the spatial distance matrix
    if(missing(s.dMat))
    {
       if(rp.given)
-        s.dMat <- gw.dist(dp.locat, rp.locat, p=p, theta=theta, longlat=longlat)
+        s.dMat <- gw.dist(ucoord.dp, ucoord.rp, p=p, theta=theta, longlat=longlat)
       else
-        s.dMat <- gw.dist(dp.locat, p=p, theta=theta, longlat=longlat) 
+        s.dMat <- gw.dist(ucoord.dp, p=p, theta=theta, longlat=longlat) 
    }
    else
    {
-      if(!(dim(s.dMat)[1]==nrow(dp.locat)&&dim(s.dMat)[2]==nrow(rp.locat)))
+      if(!(dim(s.dMat)[1]==nrow(ucoord.dp)&&dim(s.dMat)[2]==nrow(ucoord.rp)))
         stop("s.dMat is of dimnensions with duplicated locations removed")
    }
+   
    ####Calculate the temporal distance matrix
+   uts.obv <- get.ts(obs.tv)
+   uts.obv.idx <- uts.obv[[2]]
+   uts.obv <- uts.obv[[1]]
+   if(rp.given)
+   {
+     uts.reg <- get.ts(reg.tv)
+     uts.reg.idx <- uts.reg[[2]]
+     uts.reg <- uts.reg[[1]]
+   }
    if(missing(t.dMat))
    {
       if(rp.given)
-        t.dMat <- ti.distm(obs.tv,reg.tv, units=t.units)
+        t.dMat <- ti.distm(uts.obv,uts.reg, units=t.units)
       else
-        t.dMat <- ti.distm(obs.tv, units=t.units)
+        t.dMat <- ti.distm(uts.obv, units=t.units)
    }
    ####Calculate the distance matrix
    if(focus>0)
