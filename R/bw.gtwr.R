@@ -136,7 +136,7 @@ gtwr.cv<-function(bw, X, Y, kernel="bisquare",adaptive=FALSE, dp.locat, obs.tv, 
          dist.vi<-st.dMat[,i]
     else
     {
-       dist.vi<-st.dist(dp.locat, obs.tv=obs.tv, focus=i,p=p, theta=theta, longlat=F,lamda=longlat,t.units = t.units,ksi=ksi)
+       dist.vi<-st.dist(dp.locat, obs.tv=obs.tv, focus=i,p=p, theta=theta, longlat=longlat,lamda=lamda,t.units = t.units,ksi=ksi)
     }
     W.i<-gw.weight(dist.vi,bw,kernel,adaptive)
     W.i[i]<-0
@@ -193,7 +193,7 @@ gtwr.cv<-function(bw, X, Y, kernel="bisquare",adaptive=FALSE, dp.locat, obs.tv, 
 #         dist.vi<-st.dMat[,i]
 #    else
 #    {
-#       dist.vi<-st.dist(dp.locat, obs.tv=obs.tv, focus=i,p=p, theta=theta, longlat=F,lamda=longlat,t.units = t.units,ksi=ksi)
+#       dist.vi<-st.dist(dp.locat, obs.tv=obs.tv, focus=i,p=p, theta=theta, longlat=longlat,lamda=lamda,t.units = t.units,ksi=ksi)
 #    }
 #    W.i<-gw.weight(dist.vi,bw,kernel,adaptive)
 #    W.i[i]<-0
@@ -259,7 +259,7 @@ gtwr.aic<-function(bw, X, Y, kernel="bisquare",adaptive=FALSE, dp.locat, obs.tv,
          dist.vi<-st.dMat[,i]
     else
     {
-       dist.vi <- st.dist(dp.locat, obs.tv=obs.tv, focus=i,p=p, theta=theta, longlat=F,lamda=longlat,t.units = t.units,ksi=ksi)
+       dist.vi <- st.dist(dp.locat, obs.tv=obs.tv, focus=i,p=p, theta=theta, longlat=longlat,lamda=lamda,t.units = t.units,ksi=ksi)
     }
     W.i<-gw.weight(dist.vi,bw,kernel,adaptive)
     res<- try(gw_reg(X,Y,W.i,TRUE,i))
