@@ -13,7 +13,7 @@ bw.gtwr(formula, data, obs.tv, approach="CV",kernel="bisquare",adaptive=FALSE,
 }
 \arguments{
   \item{formula}{Regression model formula of a \link{formula} object }
-  \item{data}{a Spatial*DataFrame, i.e. SpatialPointsDataFrame or SpatialPolygonsDataFrame as defined in package \pkg{sp}}
+  \item{data}{a Spatial*DataFrame, i.e. SpatialPointsDataFrame or SpatialPolygonsDataFrame as defined in package \pkg{sp}, or a sf object defined in package \pkg{sf}}
   \item{obs.tv}{a vector of time tags for each observation, which could be numeric or of \link{POSIXlt} class}
   \item{approach}{specified by CV for cross-validation approach or by AIC corrected (AICc) approach}
   \item{kernel}{function chosen as follows:

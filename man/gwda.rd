@@ -23,7 +23,7 @@ gwda(formula, data, predict.data,validation = T, COV.gw=T,
 
 \arguments{
   \item{formula}{Model formula of a \link{formula} object }
-  \item{data}{a Spatial*DataFrame for training, i.e. SpatialPointsDataFrame or SpatialPolygonsDataFrame as defined in package \pkg{sp}}
+  \item{data}{a Spatial*DataFrame, i.e. SpatialPointsDataFrame or SpatialPolygonsDataFrame as defined in package \pkg{sp}, or a sf object defined in package \pkg{sf}}
   \item{predict.data}{a Spatial*DataFrame object for prediction, i.e. SpatialPointsDataFrame or SpatialPolygonsDataFrame as 
   defined in package \pkg{sp}; if it is not given, the traing data will be predicted using leave-one-out cross-validation.}
   \item{validation }{If TRUE, the results from the prediction will be validated and the correct proportion will be calculated.}
@@ -54,7 +54,7 @@ gwda(formula, data, predict.data,validation = T, COV.gw=T,
 }
 \value{
 An object of class \dQuote{gwda}. This includes a SpatialPointsDataFrame (may be gridded) or 
-SpatialPolygonsDataFrame object, SDF, (see package \dQuote{sp}) with, following the use of new version of \link{gwda}, the probabilities for
+SpatialPolygonsDataFrame object, SDF, (see package \dQuote{sp}) or sf object  (see package \dQuote{sf}) with, following the use of new version of \link{gwda}, the probabilities for
 each level, the highest probabiliity and the entropy of the probabilities in its \dQuote{data} slot.
 }
 
@@ -69,17 +69,14 @@ Geo-spatial Information Science 17(2): 85-101
 \author{Binbin Lu \email{binbinlu@whu.edu.cn}}
 \examples{
 \dontrun{
- require(tmap)
- data(ge2015)
- data(cty_eng)
- ge2015 <- ge2015[ge2015$WINNER %in% c("Con","Lab","LD"),]
- dMat <- gw.dist(coordinates(ge2015))
- bw <- bw.gwda(WINNER~Age65over+OwnOcc+NoQual+Unemp+NonWhite+LoneParHH,data=ge2015,
+ data(USelect)
+ dMat <- gw.dist(coordinates(USelect2004))
+ bw <- bw.gwda(winner~unemploy+pctcoled+PEROVER65+pcturban+WHITE,data=USelect2004,
  adaptive=TRUE,dMat=dMat)
- ge.gwda <- gwda(WINNER~Age65over+OwnOcc+NoQual+Unemp+NonWhite+LoneParHH,data=ge2015,
+ ge.gwda <- gwda(winner~unemploy+pctcoled+PEROVER65+pcturban+WHITE,data=USelect2004,
  bw=bw,adaptive=TRUE,dMat=dMat)
- table(ge2015$WINNER,ge.gwda$SDF$group.predicted)
- tm_shape(ge.gwda$SDF)+tm_fill("entropy")+tm_shape(cty_eng)+tm_borders()
+ table(USelect2004$winner,ge.gwda$SDF$group.predicted)
+ spplot(ge.gwda$SDF, "entropy")
  }
 }
 \keyword{GWDA}

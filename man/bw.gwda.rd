@@ -14,7 +14,7 @@ bw.gwda(formula, data, COV.gw = T, prior.gw = T, mean.gw = T,
 
 \arguments{
   \item{formula}{Model formula of a \link{formula} object }
-  \item{data}{a Spatial*DataFrame for training, i.e. SpatialPointsDataFrame or SpatialPolygonsDataFrame as defined in package \pkg{sp}}
+  \item{data}{a Spatial*DataFrame, i.e. SpatialPointsDataFrame or SpatialPolygonsDataFrame as defined in package \pkg{sp}, or a sf object defined in package \pkg{sf}}
   \item{COV.gw}{if true, localised variance-covariance matrix is used for GW discriminant analysis; otherwise, global variance-covariance matrix is used}
   \item{mean.gw}{if true, localised mean is used for GW discriminant analysis; otherwise, global mean is used}
   \item{prior.gw}{if true, localised prior probability is used for GW discriminant analysis; otherwise, fixed prior probability is used}

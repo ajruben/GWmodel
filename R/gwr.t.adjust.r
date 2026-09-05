@@ -9,7 +9,12 @@ gwr.t.adjust <- function(gwm.Obj)
   hatmatrix <-gwm.Obj$GW.arguments$hatmatrix
   if(!hatmatrix)
      stop("No p-values to be adjusted")
-  gwmx <- as.data.frame(gwm.Obj$SDF)
+
+  if(inherits(gwm.Obj$SDF, "Spatial"))
+       gwmx <- as.data.frame(gwm.Obj$SDF)
+    else
+       gwmx <- st_drop_geometry(gwmx <- as.data.frame(gwm.Obj$SDF))
+  
   #colnames(gmx)
   n <- dim(gwmx)[1]
   m <- dim(gwmx)[2]
@@ -57,7 +62,7 @@ gwr.t.adjust <- function(gwm.Obj)
      rownames(locat)<-rownames(df.res)
   }
   griddedObj <- F
-  if (is(gwm.Obj$SDF, "Spatial"))
+  if(inherits(gwm.Obj$SDF, "Spatial"))
   { 
       if (is(gwm.Obj$SDF, "SpatialPolygonsDataFrame"))
       {
@@ -73,6 +78,10 @@ gwr.t.adjust <- function(gwm.Obj)
          SDF <- SpatialPointsDataFrame(coords=locat, data=df.res, proj4string=CRS(p4s), match.ID=F)
          gridded(SDF) <- griddedObj 
       }
+  }
+  else if (inherits(gwm.Obj$SDF, "sf"))
+  {
+     SDF <- st_sf(df.res, geometry = st_geometry(gwm.Obj$SDF))
   }
   else
       SDF <- SpatialPointsDataFrame(coords=locat, data=df.res, proj4string=CRS(p4s), match.ID=F)

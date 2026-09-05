@@ -5,10 +5,17 @@ gwr.mink.approach <- function(formula, data, criterion="AIC", bw, bw.sel.approac
                           p.vals=seq(from=0.25, to=8, length.out=32), p.inf = T,
                           theta.vals = seq(from=0, to=0.5*pi, length.out=10), verbose=F, nlower = 10)
 {
-  if (is(data, "Spatial"))
+  if(inherits(data, "Spatial"))
   {
     dp.locat<-coordinates(data)
     data <- as(data, "data.frame")
+  }
+  else if(inherits(data, "sf"))
+  {
+    if(any((st_geometry_type(data)=="POLYGON")) | any(st_geometry_type(data)=="MULTIPOLYGON"))
+       dp.locat <- st_coordinates(st_centroid(st_geometry(data)))
+    else
+       dp.locat <- st_coordinates(st_centroid(st_geometry(data)))
   }
   else
   {
@@ -98,10 +105,17 @@ mink.approach <- function(formula, data, criterion="AIC", bw, bw.sel.approach = 
                           p.vals=seq(from=0.25, to=8, length.out=32), p.inf = T,
                           theta.vals = seq(from=0, to=0.5*pi, length.out=10), verbose=F, nlower = 10)
 {
-  if (is(data, "Spatial"))
+  if(inherits(data, "Spatial"))
   {
     dp.locat<-coordinates(data)
     data <- as(data, "data.frame")
+  }
+  else if(inherits(data, "sf"))
+  {
+    if(any((st_geometry_type(data)=="POLYGON")) | any(st_geometry_type(data)=="MULTIPOLYGON"))
+       dp.locat <- st_coordinates(st_centroid(st_geometry(data)))
+    else
+       dp.locat <- st_coordinates(st_centroid(st_geometry(data)))
   }
   else
   {

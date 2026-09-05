@@ -19,7 +19,7 @@ gwr.scalable(formula, data, bw.adapt=100, kernel = "gaussian", polynomial = 4,
 
 \arguments{
   \item{formula}{Regression model formula of a \link{formula} object }
-  \item{data}{a Spatial*DataFrame, i.e. SpatialPointsDataFrame or SpatialPolygonsDataFrame as defined in package \pkg{sp}}
+  \item{data}{a Spatial*DataFrame, i.e. SpatialPointsDataFrame or SpatialPolygonsDataFrame as defined in package \pkg{sp}, or a sf object defined in package \pkg{sf}}
   \item{bw.adapt}{adaptive bandwidth (i.e. number of nearest neighbours) used for geographically weighting}
   \item{kernel}{Kernel function to calculate the spatial weights, but note only two continuous functions available:
   
@@ -39,8 +39,9 @@ A list of class \dQuote{scgwrm}:
   \item{GW.arguments}{a list class object including the model fitting parameters for generating the report file}
   \item{GW.diagnostic}{a list class object including the diagnostic information of the model fitting}
   \item{lm}{an object of class inheriting from \dQuote{lm}, see \link{lm}. }
-  \item{SDF}{a SpatialPointsDataFrame (may be gridded) or 
-             SpatialPolygonsDataFrame object (see package \dQuote{sp}) integrated with fit.points,GWR coefficient estimates, y value,predicted values, coefficient standard errors and t-values in its "data" slot.}
+  \item{SDF}{a SpatialPointsDataFrame (may be gridded), or 
+             SpatialPolygonsDataFrame object (see package \dQuote{sp}), or sf object  (see package \dQuote{sf}) 
+             integrated with fit.points,GWR coefficient estimates, y value,predicted values, coefficient standard errors and t-values in its "data" slot.}
   \item{timings}{starting and ending time.}
 }
 \references{

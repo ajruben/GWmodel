@@ -17,7 +17,7 @@ gwr.mink.approach(formula, data, criterion="AIC", bw, bw.sel.approach = "AIC",ad
 
 \arguments{
   \item{formula}{Regression model formula of a \link{formula} object }
-  \item{data}{a Spatial*DataFrame, i.e. SpatialPointsDataFrame or SpatialPolygonsDataFrame as defined in package \pkg{sp}}
+  \item{data}{a Spatial*DataFrame, i.e. SpatialPointsDataFrame or SpatialPolygonsDataFrame as defined in package \pkg{sp}, or a sf object defined in package \pkg{sf}}
   \item{criterion}{the criterion used for distance metric selection, AICc ("AICc") or cross-validation ("CV") score; default is "AICc"}
   \item{bw}{bandwidth used in the weighting function, possibly calculated by \link{bw.gwr};fixed (distance) or adaptive bandwidth(number of nearest neighbours)}
   \item{bw.sel.approach}{approach used to seclect an optimum bandwidth for each calibration if no bandwidth (bw) is given; 

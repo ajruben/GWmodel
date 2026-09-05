@@ -145,10 +145,16 @@ check.components <- function(ld,loc) {
 # & thus it needs to be made more general...
 gw.pcplot <- function(data,vars,focus,bw,adaptive = FALSE, ylim=NULL,ylab="",fixtrans=FALSE, p=2, theta=0, longlat=F,dMat,...) 
 {
-	if (is(data, "Spatial"))
+  if (inherits(data, "Spatial"))
   {
     p4s <- proj4string(data)
     loc<-coordinates(data)
+  }
+   else if(inherits(data, "sf")) {
+    if(any((st_geometry_type(data)=="POLYGON")) | any(st_geometry_type(data)=="MULTIPOLYGON"))
+       loc<- st_coordinates(st_centroid(st_geometry(data)))
+    else
+       loc <- st_coordinates(st_geometry(data))
   }
   else
      stop("Given data must be a Spatial*DataFrame")

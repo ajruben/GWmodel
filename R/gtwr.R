@@ -24,18 +24,26 @@ gtwr<- function(formula, data, regression.points, obs.tv, reg.tv, st.bw, kernel=
   this.call <- match.call()
   p4s <- as.character(NA)
   polygons <- NULL
+  sfdf <- TRUE
   ##Data points{
-  if (is(data, "Spatial"))
+  if (inherits(data, "Spatial"))
   {
     p4s <- proj4string(data)
     dp.locat<-coordinates(data)
     if(is(data, "SpatialPolygonsDataFrame"))
        polygons <- polygons(data)
     data <- as(data, "data.frame")
+    sfdf <- FALSE
+  }
+  else if(inherits(data, "sf")) {
+    if(any((st_geometry_type(data)=="POLYGON")) | any(st_geometry_type(data)=="MULTIPOLYGON"))
+       dp.locat <- st_coordinates(st_centroid(st_geometry(data)))
+    else
+       dp.locat <- st_coordinates(st_geometry(data))
   }
   else
   {
-    stop("Given regression data must be Spatial*DataFrame")
+    stop("Given regression data must be a Spatial*DataFrame or sf object")
   }
   dp.n <- nrow(dp.locat)
   ####Check the time stamps given for the data
@@ -57,26 +65,42 @@ gtwr<- function(formula, data, regression.points, obs.tv, reg.tv, st.bw, kernel=
   }
   #####Check the given data frame and regression points
   #####Regression points
+  
   if (missing(regression.points))
   {
     rp.given <- FALSE
     rp.locat<-dp.locat
     hatmatrix<-T
     reg.tv <- obs.tv
+    if(sfdf){
+      regression.points <- data
+    }
+    else{
+      if(is.null(polygons))
+         regression.points <- SpatialPointsDataFrame(coords=rp.locat, data=data)
+      else
+        regression.points <-SpatialPolygonsDataFrame(Sr=polygons, data=data,match.ID=F)
+    }
   }
   else 
   {
     rp.given <- TRUE
     hatmatrix<-F
-    if (is(regression.points, "Spatial"))
+     if(inherits(regression.points, "Spatial")) 
     {
       rp.locat<-coordinates(regression.points)
       if (is(regression.points, "SpatialPolygonsDataFrame"))
          polygons<-polygons(regression.points)
     }
+    else if (inherits(regression.points, "sf"))
+    {
+      if (any((st_geometry_type(regression.points)=="POLYGON")) | any(st_geometry_type(regression.points)=="MULTIPOLYGON"))
+         rp.locat <- st_coordinates(st_centroid(st_geometry(regression.points)))
+      else
+         rp.locat<- st_coordinates(st_centroid(st_geometry(regression.points)))
+    }
     else if (is.numeric(regression.points) && dim(regression.points)[2] == 2)
       rp.locat<-regression.points
-    
     else
     {
       warning("Output loactions are not packed in a Spatial object,and it has to be a two-column numeric vector")
@@ -110,6 +134,7 @@ gtwr<- function(formula, data, regression.points, obs.tv, reg.tv, st.bw, kernel=
 #    if (class(obs.tv)=="yearqtr")
 #      t.units <- "quarters"
 #  }
+  ###
   ####################
   ######Extract the data frame
   ####Refer to the function lm
@@ -152,9 +177,14 @@ gtwr<- function(formula, data, regression.points, obs.tv, reg.tv, st.bw, kernel=
     if(dp.n+rp.n <10000)
     {
       if(rp.given)
-        st.dMat <- st.dist(dp.locat, rp.locat, obs.tv, reg.tv, p=p, theta=theta, longlat=longlat,lamda=lamda,t.units = t.units,ksi=ksi)
+      {
+          st.dMat <- st.dist(dp.locat, rp.locat, obs.tv, reg.tv, p=p, theta=theta, longlat=longlat,lamda=lamda,t.units = t.units,ksi=ksi)
+      }
       else
-        st.dMat <- st.dist(dp.locat, obs.tv=obs.tv, p=p, theta=theta, longlat=longlat,lamda=lamda,t.units = t.units,ksi=ksi)
+      {
+          st.dMat <- st.dist(dp.locat, obs.tv=obs.tv, p=p, theta=theta, longlat=longlat, lamda=lamda,t.units = t.units,ksi=ksi)
+      }
+        
       DM.given <- T
     }
   }
@@ -171,7 +201,7 @@ gtwr<- function(formula, data, regression.points, obs.tv, reg.tv, st.bw, kernel=
     if(DM.given)
       st.disti <- st.dMat[,i]
     else
-      st.disti <- st.dist(dp.locat, rp.locat, obs.tv, reg.tv, focus=i,p=p, theta=theta, longlat=F,lamda=longlat,t.units = t.units,ksi=ksi)
+      st.disti <- st.dist(dp.locat, rp.locat, obs.tv, reg.tv, focus=i,p=p, theta=theta, longlat=F,lamda=lamda,t.units = t.units,ksi=ksi)
     W.i<-gw.weight(st.disti,st.bw,kernel,adaptive)
     gw.resi<-gw_reg(x,y,W.i,hatmatrix,i)
     betas[i,]<-gw.resi[[1]] ######See function by IG
@@ -238,17 +268,26 @@ gtwr<- function(formula, data, regression.points, obs.tv, reg.tv, st.bw, kernel=
   }
   rownames(rp.locat)<-rownames(gtwres.df)
   
-
-  if (!is.null(polygons))
+  if(inherits(regression.points, "Spatial")) 
   {
-    rownames(gtwres.df) <- sapply(slot(polygons, "polygons"),
+     if (!is.null(polygons))
+    {
+       rownames(gtwres.df) <- sapply(slot(polygons, "polygons"),
                                   function(i) slot(i, "ID"))
-    SDF <-SpatialPolygonsDataFrame(Sr=polygons, data=gtwres.df,match.ID=F)
+       SDF <-SpatialPolygonsDataFrame(Sr=polygons, data=gtwres.df,match.ID=F)
+    }
+    else
+    {
+      SDF <- SpatialPointsDataFrame(coords=rp.locat, data=gtwres.df, proj4string=CRS(p4s), match.ID=F)
+    }
+  }
+  else if(inherits(regression.points, "sf"))
+  {
+     SDF <- st_sf(gtwres.df, geometry = st_geometry(regression.points))
   }
   else
-  {
-    SDF <- SpatialPointsDataFrame(coords=rp.locat, data=gtwres.df, proj4string=CRS(p4s), match.ID=F)
-  }
+     SDF <- SpatialPointsDataFrame(coords=rp.locat, data=gtwres.df, proj4string=CRS(p4s), match.ID=F)
+  
   timings[["stop"]] <- Sys.time()
   ##############
   res<-list(GTW.arguments=GTW.arguments,GTW.diagnostic=GTW.diagnostic,lm=lm.res,SDF=SDF,
@@ -261,7 +300,7 @@ gtwr<- function(formula, data, regression.points, obs.tv, reg.tv, st.bw, kernel=
 ##Author: BL	
 print.gtwrm<-function(x, ...)
 {
-  if(class(x) != "gtwrm") stop("It's not a gwm object")
+  if(!inherits(x, "gtwrm")) stop("It's not a gwm object")
   cat("   ***********************************************************************\n")
   cat("   *                       Package   GWmodel                             *\n")
   cat("   ***********************************************************************\n")
@@ -331,7 +370,10 @@ print.gtwrm<-function(x, ...)
   } 
   
   cat("\n   ****************Summary of GTWR coefficient estimates:*****************\n")       
-  df0 <- as(x$SDF, "data.frame")[,1:var.n, drop=FALSE]
+  if(inherits(x$SDF, "Spatial"))
+       df0 <- as(x$SDF, "data.frame")[,1:var.n, drop=FALSE]
+    else
+       df0 <- st_drop_geometry(x$SDF)[,1:var.n, drop=FALSE]
   if (any(is.na(df0))) {
     df0 <- na.omit(df0)
     warning("NAs in coefficients dropped")
@@ -370,18 +412,23 @@ print.gtwrm<-function(x, ...)
 ti.distv <- function(focal.t, obs.tv, units="auto")
 {
   n <- length(obs.tv)
-  dist.tv <- c()
-  for (t in obs.tv) 
+  dist.tv <- numeric(n)
+  for (i in 1:n) 
   {
-    if(focal.t >=t)
-       dist.tv <- c(dist.tv, ti.dist(t,focal.t,units = units))
+    if(as.character(focal.t) >= as.character(obs.tv[i]))
+    {
+       dist.tv[i] <- ti.dist(obs.tv[i],focal.t,units = units)
+    }
     else
-       dist.tv <- c(dist.tv, Inf)
+    {
+       dist.tv[i] <- 1e+50
+    }
+       
   }
   dist.tv
 }
 #Calculate the time distance matrix
-ti.distm <- function(obs.tv,reg.tv, units="auto")
+ti.distm <- function(obs.tv, reg.tv, units="auto")
 {
   n <- length(obs.tv)
   if(missing(reg.tv))
@@ -414,116 +461,25 @@ ti.distm <- function(obs.tv,reg.tv, units="auto")
 #      }
 #  }
   for(i in 1:m)
-    dist.tm[,i] <- ti.distv(reg.tv[i], obs.tv, units)
+  {
+    dist.tm[,i]  <- ti.distv(reg.tv[i], obs.tv, units)
+  } 
   dist.tm
 }
 #calculate the time distance
 #units can be "auto", "secs", "mins", "hours","days", "weeks","months","years"
 ti.dist <- function(t1,t2,units="auto")
 {
-  tcl <- class(t1)
+  tcl <- class(t1)[1]
   switch(tcl,
-         Date = as.numeric(difftime(t1,t2,units = units)),
-         POSIXlt = as.numeric(difftime(t1,t2,units = units)),
-         POSIXct = as.numeric(difftime(t1,t2,units = units)),
-         numeric = t2-t1,
-         integer = t2-t1,
-         yearmon = (t2-t1)*12,
-         yearqtr = (t2-t1)*4
+         Date = abs(as.numeric(difftime(t1,t2,units = units))),
+         POSIXlt = abs(as.numeric(difftime(t1,t2,units = units))),
+         POSIXct = abs(as.numeric(difftime(t1,t2,units = units))),
+         numeric = abs(t2-t1),
+         integer = abs(t2-t1),
+         yearmon = abs((t2-t1)*12),
+         yearqtr = abs((t2-t1)*4)
          )
-}
-#Get the forward time stamps before a specific time stamp
-get.before.ti <- function(ti, ts, time.lag,units)
-{
-  ts.ti <- c()
-  idx <- which(ts==ti)
-  idx <- idx-1
-  while(idx>0 && ti.dist(ti, ts[idx], units)<time.lag)
-  {
-    ts.ti <- c(ts.ti,ts[idx])
-    idx <- idx-1
-  }
-  ts.ti
-}
-#Get the time stamps for the ST data frame, return the sorted time stamps and index
-get.ts <- function(tv)
-{
-  t.fac <- as.factor(tv)
-  ts <- as(sort(levels(t.fac)), class(tv))
-  n <- length(ts)
-  idxs <- c()
-  for(i in tv)
-  {
-    idxs <- c(idxs, which(ts==i))
-  }
-  res <- list(ts=ts, index=idxs) 
-  res
-}
-#Get the unique locations and index
-get.uloat <- function(coords)
-{
-  TF.dup <- duplicated(coords)
-  ucoords <- coords[!TF.dup,]
-  n <- nrow(coords)
-  idx <- c()
-  for(i in 1:n)
-  {
-    idx <-c(idx, which(ucoords[,1]==coords[i,1]&ucoords[,2]==coords[i,2]))
-  }
-  res <- list(ucoords, idx)
-  res
-}
-##Calculate the spatial distance matrix with duplicated locations removed
-sdist.mat <- function(dp.locat, rp.locat, p=2, theta=0, longlat=F)
-{
-   if (missing(dp.locat)||!is.numeric(dp.locat)||dim(dp.locat)[2]!=2)
-      stop("Please input correct coordinates of data points")
-  
-   if (!missing(rp.locat)) 
-   {
-       rp.given<-T
-   }
-   else
-   {
-       rp.given<-F 
-       rp.locat<- dp.locat
-   } 
-   if (!is.numeric(rp.locat))
-      stop("Please input correct coordinates of regression points")
-   else
-      rp.locat <- matrix(rp.locat, ncol=2)
-   ###Remove the duplicated locations
-   ucoord.dp <- get.uloat(dp.locat) 
-   coord.dp.idx <- ucoord.dp[[2]]
-   ucoord.dp <- ucoord.dp[[1]]
-   ucoord.rp <- get.uloat(rp.locat) 
-   coord.rp.idx <- ucoord.dp[[2]]
-   ucoord.rp <- ucoord.rp[[1]]
-   if(rp.given)
-   {
-     dists <- gw.dist(ucoord.dp, ucoord.rp, p=p, theta=theta, longlat=longlat) 
-   }
-   else
-   {
-     dists <- gw.dist(ucoord.dp, p=p, theta=theta, longlat=longlat) 
-   }
-   dists
-}
-tdist.mat <- function(obs.tv, reg.tv, t.units = "auto")
-{
-   uts.obv <- get.ts(obs.tv)
-   uts.obv.idx <- uts.obv[[2]]
-   uts.obv <- uts.obv[[1]]
-   if(missing(reg.tv))
-      dists <- ti.distm(uts.obv, units=t.units)
-   else
-   {
-     uts.reg <- get.ts(reg.tv)
-     uts.reg.idx <- uts.reg[[2]]
-     uts.reg <- uts.reg[[1]]
-     dists <- ti.distm(uts.obv,uts.reg, units=t.units)
-   }
-   dists
 }
 #Calculate the ST distance matrix
 st.dist <- function(dp.locat, rp.locat, obs.tv, reg.tv,focus=0, p=2, theta=0, longlat=F,lamda=0.05,t.units = "auto",ksi=0, s.dMat,t.dMat)
@@ -555,42 +511,27 @@ st.dist <- function(dp.locat, rp.locat, obs.tv, reg.tv,focus=0, p=2, theta=0, lo
    else
        dists<-matrix(numeric(n.rp*n.dp),nrow=n.dp)
    ###Remove the duplicated locations
-   ucoord.dp <- get.uloat(dp.locat) 
-   coord.dp.idx <- ucoord.dp[[2]]
-   ucoord.dp <- ucoord.dp[[1]]
-   ucoord.rp <- get.uloat(rp.locat) 
-   coord.rp.idx <- ucoord.rp[[2]]
-   ucoord.rp <- ucoord.rp[[1]]
+
    ######Calculate the spatial distance matrix
    if(missing(s.dMat))
    {
       if(rp.given)
-        s.dMat <- gw.dist(ucoord.dp, ucoord.rp, p=p, theta=theta, longlat=longlat)
+        s.dMat <- gw.dist(dp.locat, rp.locat, p=p, theta=theta, longlat=longlat)
       else
-        s.dMat <- gw.dist(ucoord.dp, p=p, theta=theta, longlat=longlat) 
+        s.dMat <- gw.dist(dp.locat, p=p, theta=theta, longlat=longlat) 
    }
    else
    {
-      if(!(dim(s.dMat)[1]==nrow(ucoord.dp)&&dim(s.dMat)[2]==nrow(ucoord.rp)))
+      if(!(dim(s.dMat)[1]==nrow(dp.locat)&&dim(s.dMat)[2]==nrow(rp.locat)))
         stop("s.dMat is of dimnensions with duplicated locations removed")
    }
-   
    ####Calculate the temporal distance matrix
-   uts.obv <- get.ts(obs.tv)
-   uts.obv.idx <- uts.obv[[2]]
-   uts.obv <- uts.obv[[1]]
-   if(rp.given)
-   {
-     uts.reg <- get.ts(reg.tv)
-     uts.reg.idx <- uts.reg[[2]]
-     uts.reg <- uts.reg[[1]]
-   }
    if(missing(t.dMat))
    {
       if(rp.given)
-        t.dMat <- ti.distm(uts.obv,uts.reg, units=t.units)
+        t.dMat <- ti.distm(obs.tv,reg.tv, units=t.units)
       else
-        t.dMat <- ti.distm(uts.obv, units=t.units)
+        t.dMat <- ti.distm(obs.tv, units=t.units)
    }
    ####Calculate the distance matrix
    if(focus>0)
@@ -599,28 +540,14 @@ st.dist <- function(dp.locat, rp.locat, obs.tv, reg.tv,focus=0, p=2, theta=0, lo
      {
        for(i in 1:n.dp)
        {
-       if(is.infinite(t.dMat[uts.obv.idx[i], uts.reg.idx[focus]]))
-            {
-               dists[i] <- Inf
-            }
-       else
-       {
-         dists[i] <- lamda*s.dMat[coord.dp.idx[i],coord.rp.idx[focus]]+(1-lamda)*t.dMat[uts.obv.idx[i], uts.reg.idx[focus]]+2*sqrt(lamda*(1-lamda)*s.dMat[coord.dp.idx[i],coord.rp.idx[focus]]*t.dMat[uts.obv.idx[i], uts.reg.idx[focus]])*cos(ksi)
-         }
+         dists[i] <- lamda*s.dMat[i,focus]+(1-lamda)*t.dMat[i, focus]+2*sqrt(lamda*(1-lamda)*s.dMat[i,focus]*t.dMat[i, focus])*cos(ksi)
        }
      }
      else
      {
        for(i in 1:n.dp)
        {
-          if(is.infinite(t.dMat[uts.obv.idx[i], uts.obv.idx[focus]]))
-            {
-               dists[i] <- Inf
-            }
-            else
-            {
-         dists[i] <- lamda*s.dMat[coord.dp.idx[i],coord.dp.idx[focus]]+(1-lamda)*t.dMat[uts.obv.idx[i], uts.obv.idx[focus]]+2*sqrt(lamda*(1-lamda)*s.dMat[coord.dp.idx[i],coord.dp.idx[focus]]*t.dMat[uts.obv.idx[i], uts.obv.idx[focus]])*cos(ksi)
-         }
+          dists[i] <- lamda*s.dMat[i,focus]+(1-lamda)*t.dMat[i, focus]+2*sqrt(lamda*(1-lamda)*s.dMat[i,focus]*t.dMat[i, focus])*cos(ksi)
        }
      }
    }
@@ -631,30 +558,33 @@ st.dist <- function(dp.locat, rp.locat, obs.tv, reg.tv,focus=0, p=2, theta=0, lo
         for(j in 1:n.rp)
           for(i in 1:n.dp)
           {
-            if(is.infinite(t.dMat[uts.obv.idx[i], uts.reg.idx[j]]))
-            {
-               dists[i,j] <- Inf
-            }
-            else
-            {
-            dists[i,j] <- lamda*s.dMat[coord.dp.idx[i],coord.rp.idx[j]]+(1-lamda)*t.dMat[uts.obv.idx[i], uts.reg.idx[j]]+2*sqrt(lamda*(1-lamda)*s.dMat[coord.dp.idx[i],coord.rp.idx[j]]*t.dMat[uts.obv.idx[i], uts.reg.idx[j]])*cos(ksi)
-            }
+            #if(is.infinite(t.dMat[i, j]))
+            #{
+            #   dists[i,j] <- Inf
+            #}
+            #else
+            #{
+               dists[i,j] <- lamda*s.dMat[i,j]+(1-lamda)*t.dMat[i, j]+2*sqrt(lamda*(1-lamda)*s.dMat[i,j]*t.dMat[i, j])*cos(ksi)
+            #}
           }
       }
      else
      {
        for(j in 1:n.dp)
-         for(i in 1:j)
+         for(i in 1:n.dp)
          {
-           if(is.infinite(t.dMat[uts.obv.idx[i], uts.obv.idx[j]]))
-            {
-               dists[i,j] <- Inf
-            }
-            else
-            {
-           dists[i,j] <- lamda*s.dMat[coord.dp.idx[i],coord.dp.idx[j]]+(1-lamda)*t.dMat[uts.obv.idx[i], uts.obv.idx[j]]+2*sqrt(lamda*(1-lamda)*s.dMat[coord.dp.idx[i],coord.dp.idx[j]]*t.dMat[uts.obv.idx[i], uts.obv.idx[j]])*cos(ksi)
-            }
-           dists[j,i] <- dists[i,j]
+           #if(is.infinite(t.dMat[i, j]))
+            #{
+             #  dists[i,j] <- Inf
+            #}
+            #else
+            #{
+              #cat(dists[i,2],'\n')
+              #cat(dists[2,i],'\n')
+               dists[i,j] <- lamda*s.dMat[i,j]+(1-lamda)*t.dMat[i, j]+2*sqrt(lamda*(1-lamda)*s.dMat[i,j]*t.dMat[i, j])*cos(ksi)
+            #}
+               #dists[j,i] <- dists[i,j]
+               #cat(dists[i,2],'\n')
          }
      }
    }

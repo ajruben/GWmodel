@@ -12,9 +12,11 @@ gwr.collin.diagno <- function(formula, data, bw, kernel="bisquare",
   ##Data points{
   polygons <- NULL
   griddedObj <- F
-  if (is(data, "Spatial"))
+  spdf <- FALSE
+  if (inherits(data, "Spatial"))
   {
     p4s <- proj4string(data)
+    spdf <- TRUE
     if (is(data, "SpatialPolygonsDataFrame"))
     {
        polygons <- polygons(data)
@@ -26,6 +28,12 @@ gwr.collin.diagno <- function(formula, data, bw, kernel="bisquare",
        griddedObj <- gridded(data)
     }
     data <- as(data, "data.frame")
+  }
+  else if(inherits(data, "sf")) {
+    if(any((st_geometry_type(data)=="POLYGON")) | any(st_geometry_type(data)=="MULTIPOLYGON"))
+       dp.locat <- st_coordinates(st_centroid(st_geometry(data)))
+    else
+       dp.locat <- st_coordinates(st_geometry(data))
   }
   else
   {
@@ -141,19 +149,25 @@ gwr.collin.diagno <- function(formula, data, bw, kernel="bisquare",
     nm3 <-paste(var.nms,"VDP", sep = "_")
     res.df <- data.frame(vifs.mat,local_CN, VDP,corr.mat)
     colnames(res.df) <- c(nm2, "local_CN", nm3, nm1)
-    if (!is.null(polygons))
-    {
-       rownames(res.df) <- sapply(slot(polygons, "polygons"),
+    
+    if(spdf){
+      if (!is.null(polygons))
+      {
+        rownames(res.df) <- sapply(slot(polygons, "polygons"),
                             function(i) slot(i, "ID"))
-       SDF <-SpatialPolygonsDataFrame(Sr=polygons, data=res.df, match.ID=F)
+        SDF <-SpatialPolygonsDataFrame(Sr=polygons, data=res.df, match.ID=F)
+      }
+      else
+      {
+        SDF <- SpatialPointsDataFrame(coords=dp.locat, data=res.df, proj4string=CRS(p4s), match.ID=F)
+        if(griddedObj)
+          gridded(SDF) <- griddedObj 
+      }  
     }
     else
     {
-       SDF <- SpatialPointsDataFrame(coords=dp.locat, data=res.df, proj4string=CRS(p4s), match.ID=F)
-       if(griddedObj)
-          gridded(SDF) <- griddedObj 
-    }   
-    
+      SDF <- st_sf(res.df, geometry = st_geometry(data))
+    } 
     res <- list()
     res$corr.mat <- corr.mat
     res$VIF <- vifs.mat

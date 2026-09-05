@@ -22,7 +22,7 @@ ggwr.basic(formula, data, regression.points, bw, family =
 
 \arguments{
   \item{formula}{Regression model formula of a \link{formula} object }
-  \item{data}{a Spatial*DataFrame, i.e. SpatialPointsDataFrame or SpatialPolygonsDataFrame as defined in package \pkg{sp}}
+  \item{data}{a Spatial*DataFrame, i.e. SpatialPointsDataFrame or SpatialPolygonsDataFrame as defined in package \pkg{sp}, or a sf object defined in package \pkg{sf}}
   \item{regression.points}{a Spatial*DataFrame object, i.e. SpatialPointsDataFrame or SpatialPolygonsDataFrame as defined in package \pkg{sp}}
   \item{bw}{bandwidth used in the weighting function, possibly calculated by bw.ggwr();fixed (distance) or adaptive bandwidth(number of nearest neighbours)}
   \item{family}{a description of the error distribution and link function to
@@ -55,8 +55,9 @@ A list of class \dQuote{ggwrm}:
   \item{GW.arguments}{a \link{list} class object including the model fitting parameters for generating the report file}
   \item{GW.diagnostic}{a \link{list} class object including the diagnostic information of the model fitting}
   \item{glm.res}{an object of class inheriting from \dQuote{glm} which inherits from the class \dQuote{lm}, see \link{glm}. }
-  \item{SDF}{a SpatialPointsDataFrame (may be gridded) or 
-             SpatialPolygonsDataFrame object (see package \dQuote{sp}) integrated with fit.points,GWR coefficient estimates, y value,predicted values, coefficient standard errors and t-values in its "data" slot.}
+  \item{SDF}{a SpatialPointsDataFrame (may be gridded), or 
+             SpatialPolygonsDataFrame object (see package \dQuote{sp}), or sf object  (see package \dQuote{sf}) integrated with 
+             regression.points, GWR coefficient estimates, y value,predicted values, coefficient standard errors and t-values in its "data" slot.}
   \item{CV}{a data vector consisting of the cross-validation data}
 }
 \note{

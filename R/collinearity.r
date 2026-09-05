@@ -46,35 +46,61 @@ gwr.lcr <-function(formula, data, regression.points, bw, kernel="bisquare",
   p4s <- as.character(NA)
   #####Check the given data frame and regression points
   #####Regression points
+  spdf <- FALSE
+  sf.poly <- FALSE
+  if(inherits(data, "Spatial"))
+     spdf <- TRUE
+  else if(any((st_geometry_type(data)=="POLYGON")) | any(st_geometry_type(data)=="MULTIPOLYGON"))
+     sf.poly <- TRUE
   if (missing(regression.points))
   {
   	rp.given <- FALSE
     regression.points <- data
-    rp.locat <- coordinates(data)
+     if(spdf)
+       rp.locat <- coordinates(data)
+    else if(sf.poly)
+       rp.locat <- st_coordinates(st_centroid(st_geometry(data)))
+    else
+       rp.locat <- st_coordinates(st_geometry(data))
     hatmatrix<-T
   }
   else
   {
     rp.given <- TRUE
     hatmatrix<-F
-    if (is(regression.points, "Spatial"))
+    if (inherits(regression.points, "Spatial"))
     {
        rp.locat<-coordinates(regression.points)
+    }
+    else if (inherits(regression.points, "sf"))
+    {
+      if (any((st_geometry_type(regression.points)=="POLYGON")) | any(st_geometry_type(regression.points)=="MULTIPOLYGON"))
+         rp.locat <- st_coordinates(st_centroid(st_geometry(regression.points)))
+      else
+         rp.locat<- st_coordinates(st_centroid(st_geometry(regression.points)))
     }
     else if (is.numeric(regression.points) && dim(regression.points)[2] == 2)
        rp.locat<-regression.points
     else
-      {
-        warning("Output loactions are not packed in a Spatial object,and it has to be a two-column numeric vector")
-        rp.locat<-dp.locat
-      }
+    {
+      warning("Output loactions are not packed in a Spatial object,and it has to be a two-column numeric vector")
+      rp.locat<-dp.locat
+    }
   }
   ##Data points{
-  if (is(data, "Spatial"))
+   if(spdf)
   {
     p4s <- proj4string(data)
     dp.locat<-coordinates(data)
     data <- as(data, "data.frame")
+  }
+  else if (inherits(data, "sf"))
+  {
+    p4s <- st_crs(data)$proj4string
+    if(sf.poly)
+      dp.locat <- st_coordinates(st_centroid(st_geometry(data)))
+    else
+      dp.locat <- st_coordinates(st_geometry(data))
   }
   else
   {
@@ -225,6 +251,8 @@ gwr.lcr <-function(formula, data, regression.points, bw, kernel="bisquare",
     }
     rownames(rp.locat)<-rownames(gwres.df)
     griddedObj <- F
+  if(inherits(regression.points, "Spatial")) 
+  {
     if (is(regression.points, "Spatial"))
     { 
         if (is(regression.points, "SpatialPolygonsDataFrame"))
@@ -242,8 +270,14 @@ gwr.lcr <-function(formula, data, regression.points, bw, kernel="bisquare",
            gridded(SDF) <- griddedObj 
         }
     }
-    else
+  }
+  else if(inherits(regression.points, "sf"))
+  {
+     SDF <- st_sf(gwres.df, geometry = st_geometry(regression.points))
+  }
+  else
         SDF <- SpatialPointsDataFrame(coords=rp.locat, data=gwres.df, proj4string=CRS(p4s))
+
     timings[["stop"]] <- Sys.time()
 
      if(rp.given)
@@ -260,7 +294,7 @@ gwr.lcr <-function(formula, data, regression.points, bw, kernel="bisquare",
 ##Author: BL
 print.gwrlcr<-function(x, ...)
 {
-  if(class(x) != "gwrlcr") stop("It's not a gwrlcr object")
+  if( !inherits(x, "gwrlcr")) stop("It's not a gwrlcr object")
   cat("   ***********************************************************************\n")
   cat("   *                       Package   GWmodel                             *\n")
   cat("   ***********************************************************************\n")
@@ -309,7 +343,10 @@ print.gwrlcr<-function(x, ...)
    }
 
 	cat("\n   **************Summary of Ridge GWR coefficient estimates:***************\n")
-		df0 <- as(x$SDF, "data.frame")[,1:var.n, drop=FALSE]
+		if(inherits(x$SDF, "Spatial"))
+       df0 <- as(x$SDF, "data.frame")[,1:var.n, drop=FALSE]
+    else
+       df0 <- st_drop_geometry(x$SDF)[,1:var.n, drop=FALSE]
         if (any(is.na(df0))) {
             df0 <- na.omit(df0)
             warning("NAs in coefficients dropped")
@@ -377,10 +414,26 @@ bw.gwr.lcr <-function(formula, data, kernel="bisquare",
   ##Data points{
   if (is(data, "Spatial"))
   {
-    p4s <- proj4string(data)
     dp.locat<-coordinates(data)
     rp.locat<-dp.locat
     data <- as(data, "data.frame")
+  }
+  if(inherits(data, "Spatial"))
+  {
+    if (is(data, "Spatial"))
+    {
+     dp.locat<-coordinates(data)
+     data <- as(data, "data.frame")
+    }
+    rp.locat<-dp.locat
+  }
+  else if(inherits(data, "sf"))
+  {
+    if(any((st_geometry_type(data)=="POLYGON")) | any(st_geometry_type(data)=="MULTIPOLYGON"))
+      dp.locat <- st_coordinates(st_centroid(st_geometry(data)))
+    else
+      dp.locat <- st_coordinates(st_geometry(data))
+    rp.locat<-dp.locat
   }
   else
   {
@@ -419,6 +472,7 @@ bw.gwr.lcr <-function(formula, data, kernel="bisquare",
       if (dim.dMat[1]!=dp.n||dim.dMat[2]!=rp.n)
          stop("Dimensions of dMat are not correct")
     }
+    print(dim(dMat))
    #########Find the range for the bandwidth selection
   if(adaptive)
   {

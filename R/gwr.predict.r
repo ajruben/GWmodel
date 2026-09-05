@@ -13,13 +13,23 @@ gwr.predict<-function(formula, data, predictdata, bw, kernel="bisquare",adaptive
   this.call <- match.call()
   p4s <- as.character(NA)
   ##Data points for fitting GWR model
-  if (is(data, "Spatial"))
+  if (inherits(data, "Spatial"))
   {
     p4s <- proj4string(data)
     fd.locat<-coordinates(data)
     predict.SPDF <- data
     fd.n <- nrow(fd.locat)
     data <- as(data, "data.frame")
+  }
+  else if(inherits(data, "sf"))
+  {
+    if(any((st_geometry_type(data)=="POLYGON")) | any(st_geometry_type(data)=="MULTIPOLYGON"))
+       fd.locat <- st_coordinates(st_centroid(st_geometry(data)))
+    else
+       fd.locat <- st_coordinates(st_geometry(data))
+    fd.n <- nrow(fd.locat)
+    predict.SPDF <- data
+    data <- st_drop_geometry(data)
   }
   else
   {
@@ -54,7 +64,7 @@ gwr.predict<-function(formula, data, predictdata, bw, kernel="bisquare",adaptive
   }
   else
   {
-    if (is(predictdata, "Spatial"))
+    if (inherits(predictdata, "Spatial"))
     {
       p4s <- proj4string(predictdata)
       pd.locat<-coordinates(predictdata)
@@ -64,6 +74,17 @@ gwr.predict<-function(formula, data, predictdata, bw, kernel="bisquare",adaptive
       if(any((inde_vars %in% names(predictdata))==F))
         stop("All the independent variables should be included in the predictdata")
     }
+    else{
+      if(any((st_geometry_type(predictdata)=="POLYGON")) | any(st_geometry_type(predictdata)=="MULTIPOLYGON"))
+       pd.locat<- st_coordinates(st_centroid(st_geometry(predictdata)))
+    else
+       pd.locat <- st_coordinates(st_geometry(predictdata))
+       predict.SPDF <- predictdata 
+       predictdata <- st_drop_geometry(predictdata)
+    }
+    pd.given <- T
+    if(any((inde_vars %in% names(predictdata))==F))
+        stop("All the independent variables should be included in the predictdata")
   }
   pd.n <- nrow(pd.locat)
   x.p <-  predictdata[,inde_vars]
@@ -127,11 +148,11 @@ gwr.predict<-function(formula, data, predictdata, bw, kernel="bisquare",adaptive
     if (!pd.given)
       W.i[i] <- 0 
     wt[,i] <- W.i
-    gw.resi<-gw.reg1(x,y,W.i,i)
+    gw.resi<-gw_reg_1(x,y,W.i)
     betas1[i,]<-gw.resi[[1]]
     xtxinv[i,,] <-gw.resi[[2]]
   }
-  gw.predict <- gw.fitted(x.p, betas1)
+  gw.predict <- gw_fitted(x.p, betas1)
   ###### fit the model
   betas2 <- matrix(nrow=fd.n, ncol=var.n)
   S <- matrix(nrow=fd.n, ncol=fd.n)
@@ -177,7 +198,7 @@ gwr.predict<-function(formula, data, predictdata, bw, kernel="bisquare",adaptive
   colnames(gwr.pred.df) <- c(paste(colnames(x), "coef", sep = "_"), "prediction", "prediction_var")
   rownames(pd.locat)<-rownames(gwr.pred.df)
   griddedObj <- F
-  if (is(predict.SPDF, "Spatial"))
+  if (inherits(predict.SPDF, "Spatial"))
   { 
       if (is(predict.SPDF, "SpatialPolygonsDataFrame"))
       {
@@ -194,6 +215,8 @@ gwr.predict<-function(formula, data, predictdata, bw, kernel="bisquare",adaptive
          gridded(SDF) <- griddedObj 
       }
   }
+  else if (inherits(predict.SPDF, "sf"))
+     SDF <- st_sf(gwr.pred.df, geometry = st_geometry(predict.SPDF))
   else
       SDF <- SpatialPointsDataFrame(coords=pd.locat, data=gwr.pred.df, proj4string=CRS(p4s), match.ID=F)
   
@@ -215,22 +238,11 @@ gwr.predict<-function(formula, data, predictdata, bw, kernel="bisquare",adaptive
   class(res) <-"gwrm.pred"
   invisible(res)
 }
-
-gw.reg1<-function(X,Y,W.i,focus)
-###GWR for prediction
-{
-    xtxinv <- solve(t(X*W.i)%*%X)
-    xty <- t(X*W.i)
-    betai<-xtxinv%*%xty%*%Y
-    res<-list(betai,xtxinv,xty) 
-    res    
-}
-
 ############################Layout function for outputing the GWR results
 ##Author: BL	
 print.gwrm.pred<-function(x, ...)
 {
-  if(class(x) != "gwrm.pred") stop("It's not a gwm object")
+  if(!inherits(x, "gwrm.pred")) stop("It's not a gwm object")
   cat("   ***********************************************************************\n")
   cat("   *                       Package   GWmodel                             *\n")
   cat("   ***********************************************************************\n")
@@ -271,7 +283,10 @@ print.gwrm.pred<-function(x, ...)
      if (x$GW.arguments$theta!=0&&x$GW.arguments$p!=2&&!x$GW.arguments$longlat)
         cat("   Coordinate rotation: The coordinate system is rotated by an angle", x$GW.arguments$theta, "in radian.\n")   
      } 
-	SDF.df <-as(x$SDF, "data.frame")
+	if(inherits(x$SDF, "Spatial"))
+     SDF.df <-as(x$SDF, "data.frame")
+  else
+     SDF.df <- st_drop_geometry(x$SDF)
 	cat("\n   ****************Summary of GWR coefficient estimates:******************\n")       
 		df0 <- SDF.df[,1:var.n, drop=FALSE]
         if (any(is.na(df0))) {

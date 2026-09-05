@@ -20,7 +20,7 @@ gwr.model.selection(DeVar=NULL,InDeVars=NULL, data=list(),bw=NULL,approach="CV",
 \arguments{
   \item{DeVar}{dependent variable}
   \item{InDeVars}{a vector of independent variables for model selection}
-  \item{data}{a Spatial*DataFrame, i.e. SpatialPointsDataFrame or SpatialPolygonsDataFrame as defined in package \pkg{sp}}  
+  \item{data}{a Spatial*DataFrame, i.e. SpatialPointsDataFrame or SpatialPolygonsDataFrame as defined in package \pkg{sp}, or a sf object defined in package \pkg{sf}}
   \item{bw}{bandwidth used in the weighting function, possibly calculated by \code{\link{bw.gwr}}}
   \item{approach}{specified by \bold{CV} (\bold{cv}) for cross validation approach or \bold{AIC} (\bold{aic}) 
                   for selecting bandwidth by AICc values}

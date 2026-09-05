@@ -11,7 +11,7 @@ kernel="bisquare",adaptive=FALSE, p=2, theta=0, longlat=F,dMat)
 }
 \arguments{
   \item{formula}{Regression model formula of a \link{formula} object }
-  \item{data}{a Spatial*DataFrame, i.e. SpatialPointsDataFrame or SpatialPolygonsDataFrame as defined in package \pkg{sp}}
+  \item{data}{a Spatial*DataFrame, i.e. SpatialPointsDataFrame or SpatialPolygonsDataFrame as defined in package \pkg{sp}, or a sf object defined in package \pkg{sf}}
   \item{family}{a description of the error distribution and link function to
           be used in the model, which can be specified by \dQuote{poisson} or \dQuote{binomial}}
   \item{approach}{specified by CV for cross-validation approach or by AIC corrected (AICc) approach}

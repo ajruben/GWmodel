@@ -11,7 +11,7 @@ gwr.montecarlo(formula, data = list(),nsims=99, kernel="bisquare",adaptive=F, bw
 }
 \arguments{
   \item{formula}{Regression model formula of a \link{formula} object}
-  \item{data}{a Spatial*DataFrame, i.e. SpatialPointsDataFrame or SpatialPolygonsDataFrame as defined in package \pkg{sp}}
+  \item{data}{a Spatial*DataFrame, i.e. SpatialPointsDataFrame or SpatialPolygonsDataFrame as defined in package \pkg{sp}, or a sf object defined in package \pkg{sf}}
   \item{nsims}{the number of randomisations}
   \item{kernel}{function chosen as follows:
   
