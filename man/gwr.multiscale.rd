@@ -3,6 +3,8 @@
 \alias{gwr.q2}
 \alias{print.multiscalegwr}
 \alias{gwr.backfit}
+\alias{gw_fitted}
+\alias{new_multiscale}
 \title{Multiscale GWR}
 \description{
 This function implements multiscale GWR to detect variations in regression relationships across
@@ -11,17 +13,20 @@ relationship but also (and simultaneously) find a different distance metric for
 each relationship (if required to do so).
 }
 \usage{
-gwr.multiscale(formula, data, kernel="bisquare", adaptive=FALSE, criterion="dCVR",
-               max.iterations=2000,threshold=0.00001, dMats, p.vals, theta.vals,
-               longlat=FALSE, bws0, bw.seled=rep(F, length(bws0)), approach = "AIC",
-               bws.thresholds=rep(0.1, length(dMats)), bws.reOpts=5,verbose=F, 
-                hatmatrix=T, predictor.centered=rep(T, length(bws0)-1), nlower = 10)
+gwr.multiscale(formula, data, kernel = "bisquare", adaptive = FALSE,
+                 criterion = "dCVR", max.iterations = 2000, threshold =
+                 1e-05, dMats, var.dMat.indx, p.vals, theta.vals,
+                 longlat = FALSE, bws0, bw.seled, approach = "AIC", bws.thresholds, 
+                 bws.reOpts = 5, verbose = F,
+                 hatmatrix = T, predictor.centered = rep(T,
+                 length(bws0) - 1), nlower = 10, parallel.method = F,
+                 parallel.arg = NULL, force.armadillo = F)
 \method{print}{multiscalegwr}(x, \dots)
 }
 
 \arguments{
   \item{formula}{Regression model formula of a \link{formula} object }
-  \item{data}{a Spatial*DataFrame, i.e. SpatialPointsDataFrame or SpatialPolygonsDataFrame as defined in package \pkg{sp}}
+  \item{data}{a Spatial*DataFrame, i.e. SpatialPointsDataFrame or SpatialPolygonsDataFrame as defined in package \pkg{sp}, or a sf object defined in package \pkg{sf}}
   \item{kernel}{function chosen as follows:
   
                 gaussian: wgt = exp(-.5*(vdist/bw)^2);
@@ -38,6 +43,7 @@ gwr.multiscale(formula, data, kernel="bisquare", adaptive=FALSE, criterion="dCVR
   \item{max.iterations}{maximum number of iterations in the back-fitting procedure}
   \item{threshold}{threshold value to terminate the back-fitting iterations}
   \item{dMats}{a \link{list} of distance matrices used for estimating each specific parameter}
+  \item{var.dMat.indx}{index corresponds to a specific distance matrix for each exploratory variable, if dMats is provided}
   \item{p.vals}{ a collection of positive numbers used as the power of the Minkowski distance}
   \item{theta.vals}{a collection of values used as angles in radians to rotate the coordinate system}
   \item{longlat}{if TRUE, great circle distances will be calculated}
@@ -50,13 +56,27 @@ gwr.multiscale(formula, data, kernel="bisquare", adaptive=FALSE, criterion="dCVR
   \item{predictor.centered}{a logical vector of length equalling to the number of predictors, and note intercept is not included; if the element is TRUE, the corresponding predictor will be centered.}
   \item{hatmatrix}{if TRUE the hatmatrix for the whole model will be calculated, and AICc, adjusted-R2 values will be returned accordingly.}
   \item{nlower}{the minmum number of nearest neighbours if an adaptive kernel is used}
+  \item{parallel.method}{ FALSE as default, and the calibration will be conducted traditionally via the serial technique, 
+                         "omp": multi-thread technique with the OpenMP API, 
+                         "cluster": multi-process technique with the \pkg{parallel} package,
+                         "cuda": parallel computing technique with CUDA}
+  \item{parallel.arg}{ if parallel.method is not FALSE, then set the argument by following:
+                      if parallel.method is "omp", parallel.arg refers to the number of threads used, and its default value is 
+                       the number of cores - 1;
+                      if parallel.method is "cluster", parallel.arg refers to the number of R sessions used, and its default value is 
+                       the number of cores - 1;
+                      if parallel.method is "cuda",  parallel.arg refers to the number of calibrations  included in each group, 
+                      but note a too large value may cause the overflow of GPU memory. }
+  \item{force.armadillo}{if TRUE, use the original RcppArmadillo implementation instead of the new RcppEigen implementation. Only matters if parallel.method = F or parallel.method = "omp".}
   \item{x}{an object of class \dQuote{multiscalegwr}, returned by the function \link{gwr.multiscale}}
   \item{...}{arguments passed through (unused)}
 }
 \value{
 A list of class \dQuote{psdmgwr}:
- \item{SDF}{a SpatialPointsDataFrame (may be gridded) or 
-             SpatialPolygonsDataFrame object (see package \dQuote{sp}) integrated with data locations,coefficient estimates from the PSDM GWR model,predicted y values,residuals, coefficient standard errors and t-values in its "data" slot.}
+ \item{SDF}{a SpatialPointsDataFrame (may be gridded), or 
+             SpatialPolygonsDataFrame object (see package \dQuote{sp}), or sf object  (see package \dQuote{sf}) 
+             integrated with data locations,coefficient estimates from the PSDM GWR model,predicted y values,residuals,
+              coefficient standard errors and t-values in its "data" slot.}
   \item{GW.arguments}{a list class object including the model fitting parameters for generating the report file}
   \item{GW.diagnostic}{a list class object including the diagnostic information of the model fitting}
   \item{lm}{an object of class inheriting from \dQuote{lm}, see \link{lm}. }

@@ -5,10 +5,20 @@ bw.gwda <- function(formula, data, COV.gw = T, prior.gw = T, mean.gw = T,
                  = FALSE, p = 2, theta = 0, longlat = F, dMat)
 {
   #data must be given as training data
-  if (is(data, "Spatial")) {
-    p4s <- proj4string(data)
-    dp.locat <- coordinates(data)
-    data <- as(data, "data.frame")
+   if(inherits(data, "Spatial"))
+  {
+    if (is(data, "Spatial"))
+    {
+     dp.locat<-coordinates(data)
+     data <- as(data, "data.frame")
+    }
+  }
+  else if(inherits(data, "sf"))
+  {
+    if(any((st_geometry_type(data)=="POLYGON")) | any(st_geometry_type(data)=="MULTIPOLYGON"))
+      dp.locat <- st_coordinates(st_centroid(st_geometry(data)))
+    else
+      dp.locat <- st_coordinates(st_geometry(data))
   }
   else
     stop("Given training data must be a Spatial*DataFrame or data.frame object")

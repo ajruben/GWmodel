@@ -8,13 +8,21 @@ gwr.model.selection<-function(DeVar=NULL,InDeVars=NULL, data=list(),bw=NULL,appr
    ##Data points
   spdf <- data
   if (!is.null(data)) {
-    if (is(data, "Spatial")) {
+    if (inherits(data, "Spatial")) {
       p4s <- proj4string(data)
       dp.locat <- coordinates(data)
       data <- as(data, "data.frame")
-    } else {
+    }
+    if (inherits(data, "sf"))
+    {
+      if (any((st_geometry_type(data)=="POLYGON")) | any(st_geometry_type(data)=="MULTIPOLYGON"))
+         dp.locat <- st_coordinates(st_centroid(st_geometry(data)))
+      else
+         dp.locat<- st_coordinates(st_centroid(st_geometry(data)))
+    }  
+    else {
       if (!is(data, "data.frame"))
-        stop("Given regression data must be data.frame or Spatial*DataFrame")
+        stop("Given regression data must be a sf data.frame or Spatial*DataFrame")
     }
   }
   else stop("No regression data frame is avaiable!")
@@ -57,13 +65,13 @@ gwr.model.selection<-function(DeVar=NULL,InDeVars=NULL, data=list(),bw=NULL,appr
     for (j in 1:(var.n - i + 1)) {
       vars.j <- c(level.vars, InDeVars.Sub[j])
       fml <- Generate.formula(DeVar, vars.j)
-	    cat("Now calbrating the model: \n", fml, "\n")
+	    cat("Now calibrating the model: \n", fml, "\n")
 	    matL <- extract.mat(fml, data)
 	    y <- matL[[1]]
 	    x <- matL[[2]]
       if (is.null(bw)) {
-        part1 <- paste("bandwidth<-bw.gwr(", fml, sep = "")
-        part2 <- "data=spdf,kernel=kernel,approach=approach,dMat=dMat)"
+        part1 <- paste("bw<-bw.gwr(", fml, sep = "")
+        part2 <- "data=spdf,kernel=kernel,approach=approach,dMat=dMat, parallel.method=parallel.method,parallel.arg=parallel.arg)"
         expression <- paste(part1, part2, sep = ",")
         print(expression)
         eval(parse(text = expression))
@@ -75,7 +83,6 @@ gwr.model.selection<-function(DeVar=NULL,InDeVars=NULL, data=list(),bw=NULL,appr
           stopifnot(is.numeric(bw))
           stopifnot((bw > min(dMat)))
         }
-        bandwidth <- bw
       } 
 
       ##############Calibrate the GWR model
@@ -113,7 +120,7 @@ gwr.model.selection<-function(DeVar=NULL,InDeVars=NULL, data=list(),bw=NULL,appr
         for (i in 1:dp.n)
         {
           dist.vi<-dMat[,i]
-          W.i<-gw.weight(dist.vi,bandwidth,kernel,adaptive)
+          W.i<-gw.weight(dist.vi,bw,kernel,adaptive)
           gw.resi<-gw_reg(x,y,W.i,hatmatrix=T,i)
           betas[i,]<-as.numeric(gw.resi[[1]])
           S[i,]<-gw.resi[[2]]
@@ -189,13 +196,13 @@ model.selection.gwr <-function(DeVar=NULL,InDeVars=NULL, data=list(),bw=NULL,app
     for (j in 1:(var.n - i + 1)) {
       vars.j <- c(level.vars, InDeVars.Sub[j])
       fml <- Generate.formula(DeVar, vars.j)
-      cat("Now calbrating the model: \n", fml, "\n")
+      cat("Now calibrating the model: \n", fml, "\n")
       matL <- extract.mat(fml, data)
       y <- matL[[1]]
       x <- matL[[2]]
       if (is.null(bw)) {
-        part1 <- paste("bandwidth<-bw.gwr(", fml, sep = "")
-        part2 <- "data=spdf,kernel=kernel,approach=approach,dMat=dMat)"
+        part1 <- paste("bw<-bw.gwr(", fml, sep = "")
+        part2 <- "data=spdf,kernel=kernel,approach=approach,dMat=dMat, parallel.method=parallel.method,parallel.arg=parallel.arg)"
         expression <- paste(part1, part2, sep = ",")
         print(expression)
         eval(parse(text = expression))
@@ -207,7 +214,6 @@ model.selection.gwr <-function(DeVar=NULL,InDeVars=NULL, data=list(),bw=NULL,app
           stopifnot(is.numeric(bw))
           # stopifnot((bw > min(dMat)))
         }
-        bandwidth <- bw
       }
 
       ##############Calibrate the GWR model
@@ -250,7 +256,7 @@ model.selection.gwr <-function(DeVar=NULL,InDeVars=NULL, data=list(),bw=NULL,app
       } else {
         for (i in 1:dp.n) {
           dist.vi<-dMat[,i]
-          W.i<-gw.weight(dist.vi,bandwidth,kernel,adaptive)
+          W.i<-gw.weight(dist.vi,bw,kernel,adaptive)
           gw.resi<-gw_reg(x,y,W.i,hatmatrix=T,i)
           betas[i,]<-as.numeric(gw.resi[[1]])
           S[i,]<-gw.resi[[2]]

@@ -12,7 +12,7 @@ gwss.montecarlo(data, vars, kernel = "bisquare",
                 dMat, quantile=FALSE,nsim=99) 
 }
 \arguments{
-  \item{data}{a Spatial*DataFrame, i.e. SpatialPointsDataFrame or SpatialPolygonsDataFrame as defined in package \pkg{sp}}
+  \item{data}{a Spatial*DataFrame, i.e. SpatialPointsDataFrame or SpatialPolygonsDataFrame as defined in package \pkg{sp}, or a sf object defined in package \pkg{sf}}
   \item{vars}{a vector of variable names to be summarized}
   \item{bw}{bandwidth used in the weighting function}
   \item{kernel}{function chosen as follows:

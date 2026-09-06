@@ -15,7 +15,7 @@ gwr.lcr(formula, data, regression.points, bw, kernel="bisquare",
 }
 \arguments{
   \item{formula}{Regression model formula of a \link{formula} object }
-  \item{data}{a Spatial*DataFrame, i.e. SpatialPointsDataFrame or SpatialPolygonsDataFrame as defined in package \pkg{sp}}
+  \item{data}{a Spatial*DataFrame, i.e. SpatialPointsDataFrame or SpatialPolygonsDataFrame as defined in package \pkg{sp}, or a sf object defined in package \pkg{sf}}
   \item{regression.points}{a Spatial*DataFrame object, i.e. SpatialPointsDataFrame 
                            or SpatialPolygonsDataFrame as defined in package \pkg{sp},
                            or a two-column numeric array}
@@ -51,8 +51,9 @@ above this user-specified threshold, a local ridge parameter is found}
 }
 \value{
 A list of class \dQuote{rgwr}:
-  \item{SDF}{a SpatialPointsDataFrame (may be gridded) or SpatialPolygonsDataFrame object 
-            (see package "sp") with coordinates of regression.points in its "data" slot.}
+  \item{SDF}{a SpatialPointsDataFrame (may be gridded), or 
+             SpatialPolygonsDataFrame object (see package \dQuote{sp}), or sf object  (see package \dQuote{sf}) 
+             with coordinates of regression.points in its "data" slot.}
   \item{GW.arguments}{parameters used for the LCR-GWR calibration}
   \item{GW.diagnostic}{diagnostic information is given when data points are also used as regression locations}
   \item{timings}{timing information for running this function}

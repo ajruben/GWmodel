@@ -15,8 +15,8 @@ gwr.predict(formula, data, predictdata, bw, kernel="bisquare",adaptive=FALSE, p=
 
 \arguments{
   \item{formula}{Regression model formula of a \link{formula} object }
-  \item{data}{a Spatial*DataFrame, i.e. SpatialPointsDataFrame or SpatialPolygonsDataFrame as defined in package \pkg{sp}}
-  \item{predictdata}{a Spatial*DataFrame object to provide prediction locations, i.e. SpatialPointsDataFrame or SpatialPolygonsDataFrame as defined in package \pkg{sp}}
+  \item{data}{a Spatial*DataFrame, i.e. SpatialPointsDataFrame or SpatialPolygonsDataFrame as defined in package \pkg{sp}, or a sf object defined in package \pkg{sf}}
+  \item{predictdata}{a Spatial*DataFrame, i.e. SpatialPointsDataFrame or SpatialPolygonsDataFrame as defined in package \pkg{sp}, or a sf object defined in package \pkg{sf}}
   \item{bw}{bandwidth used in the weighting function, possibly calculated by \link{bw.gwr};fixed (distance) or adaptive bandwidth(number of nearest neighbours)}
   \item{kernel}{function chosen as follows:
   
@@ -41,7 +41,9 @@ gwr.predict(formula, data, predictdata, bw, kernel="bisquare",adaptive=FALSE, p=
 \value{
 A list of class \dQuote{gwrm.pred}:
   \item{GW.arguments}{a list of geographically weighted arguments}
-  \item{SDF}{a SpatialPointsDataFrame (may be gridded) or SpatialPolygonsDataFrame object (see package "sp") with GWR coefficients, predictions and prediction variances in its "data" slot.}
+  \item{SDF}{a SpatialPointsDataFrame (may be gridded), or 
+             SpatialPolygonsDataFrame object (see package \dQuote{sp}), or sf object  (see package \dQuote{sf}) 
+             with GWR coefficients, predictions and prediction variances in its "data" slot.}
   \item{this.call}{the function call used.}
 }
 \references{

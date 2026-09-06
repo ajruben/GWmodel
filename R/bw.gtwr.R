@@ -1,13 +1,24 @@
 
 ###Select the bandwidth for GTWR
 # Optimize the bandwidth only via the CV or AICc approach
-bw.gtwr<-function(formula, data, obs.tv, approach="CV",kernel="bisquare",adaptive=FALSE, p=2, theta=0, longlat=F,lamda=0.05,t.units = "auto",ksi=0, st.dMat,verbose=T)
+bw.gtwr<-function(formula, data, obs.tv, approach="CV",kernel="bisquare",adaptive=FALSE, p=2, theta=0, 
+                  longlat=F,lamda=0.05,t.units = "auto",ksi=0, st.dMat,verbose=T)
 {
     ##Data points{
-  if (is(data, "Spatial"))
+   if(inherits(data, "Spatial"))
   {
-    dp.locat<-coordinates(data)
-    data <- as(data, "data.frame")
+    if (is(data, "Spatial"))
+    {
+     dp.locat<-coordinates(data)
+     data <- as(data, "data.frame")
+    }
+  }
+  else if(inherits(data, "sf"))
+  {
+    if(any((st_geometry_type(data)=="POLYGON")) | any(st_geometry_type(data)=="MULTIPOLYGON"))
+      dp.locat <- st_coordinates(st_centroid(st_geometry(data)))
+    else
+      dp.locat <- st_coordinates(st_geometry(data))
   }
   else
   {
@@ -24,7 +35,7 @@ bw.gtwr<-function(formula, data, obs.tv, approach="CV",kernel="bisquare",adaptiv
   mt <- attr(mf, "terms")
   y <- model.extract(mf, "response")
   x <- model.matrix(mt, mf)
-  dp.n<-nrow(data)
+  dp.n<-as.numeric(nrow(data))
   
   if(missing(obs.tv))
   {
@@ -125,7 +136,7 @@ gtwr.cv<-function(bw, X, Y, kernel="bisquare",adaptive=FALSE, dp.locat, obs.tv, 
          dist.vi<-st.dMat[,i]
     else
     {
-       dist.vi<-st.dist(dp.locat, obs.tv=obs.tv, focus=i,p=p, theta=theta, longlat=F,lamda=longlat,t.units = t.units,ksi=ksi)
+       dist.vi<-st.dist(dp.locat, obs.tv=obs.tv, focus=i,p=p, theta=theta, longlat=longlat,lamda=lamda,t.units = t.units,ksi=ksi)
     }
     W.i<-gw.weight(dist.vi,bw,kernel,adaptive)
     W.i[i]<-0
@@ -182,7 +193,7 @@ gtwr.cv<-function(bw, X, Y, kernel="bisquare",adaptive=FALSE, dp.locat, obs.tv, 
 #         dist.vi<-st.dMat[,i]
 #    else
 #    {
-#       dist.vi<-st.dist(dp.locat, obs.tv=obs.tv, focus=i,p=p, theta=theta, longlat=F,lamda=longlat,t.units = t.units,ksi=ksi)
+#       dist.vi<-st.dist(dp.locat, obs.tv=obs.tv, focus=i,p=p, theta=theta, longlat=longlat,lamda=lamda,t.units = t.units,ksi=ksi)
 #    }
 #    W.i<-gw.weight(dist.vi,bw,kernel,adaptive)
 #    W.i[i]<-0
@@ -218,7 +229,8 @@ gtwr.cv<-function(bw, X, Y, kernel="bisquare",adaptive=FALSE, dp.locat, obs.tv, 
 
 ####Calculate the AICc with a given bandwidth
 ##Author: Binbin Lu
-gtwr.aic<-function(bw, X, Y, kernel="bisquare",adaptive=FALSE, dp.locat, obs.tv, p=2, theta=0, longlat=F,lamda=0.05,t.units = "auto",ksi=0, st.dMat,verbose=T)
+gtwr.aic<-function(bw, X, Y, kernel="bisquare",adaptive=FALSE, dp.locat, obs.tv, p=2, theta=0, longlat=F,lamda=0.05,t.units = "auto",ksi=0, st.dMat,verbose=T,
+                   aicc.rss.floor = 1e-8, aicc.enp.margin = 1)
 {
    dp.n<-length(dp.locat[,1])
    var.n <- ncol(X)
@@ -235,7 +247,11 @@ gtwr.aic<-function(bw, X, Y, kernel="bisquare",adaptive=FALSE, dp.locat, obs.tv,
   }
   ############################################AIC
   ###In this function, the whole hatmatrix is not fully calculated and only the diagonal elements are computed
-  S<-matrix(nrow=dp.n,ncol=dp.n)
+  # Only diag(S) is ever read (see the comment above), so keep just the
+  # diagonal rather than allocating and filling an n x n hat matrix:
+  # that was 8*n^2 bytes per bandwidth evaluation -- 1.6 GB at n=14000 --
+  # rebuilt from scratch at every step of the bandwidth search.
+  s.diag <- rep(NA_real_, dp.n)
   betas <-matrix(nrow=dp.n, ncol=var.n)
   for (i in 1:dp.n)
   {
@@ -243,28 +259,42 @@ gtwr.aic<-function(bw, X, Y, kernel="bisquare",adaptive=FALSE, dp.locat, obs.tv,
          dist.vi<-st.dMat[,i]
     else
     {
-       dist.vi <- st.dist(dp.locat, obs.tv=obs.tv, focus=i,p=p, theta=theta, longlat=F,lamda=longlat,t.units = t.units,ksi=ksi)
+       dist.vi <- st.dist(dp.locat, obs.tv=obs.tv, focus=i,p=p, theta=theta, longlat=longlat,lamda=lamda,t.units = t.units,ksi=ksi)
     }
     W.i<-gw.weight(dist.vi,bw,kernel,adaptive)
     res<- try(gw_reg(X,Y,W.i,TRUE,i))
     if(!inherits(res, "try-error"))
     {
-      S[i,]<-res[[2]]
+      s.diag[i]<-res[[2]][i]
       betas[i,] <- res[[1]]
     }
     else
     {
-      S[i,]<-Inf
+      s.diag[i]<-Inf
       break
     }
   }
 
-  if (!any(is.infinite(S)))
-  {
-     AICc<-AICc(Y,X,betas, S)
+  tr.S <- sum(s.diag)
+  bad  <- any(is.infinite(s.diag)) || anyNA(s.diag) || !is.finite(tr.S) ||
+          tr.S >= (dp.n - 2 - aicc.enp.margin)
+  if (bad) {
+    AICc <- Inf
+  } else {
+    yhat     <- rowSums(X * betas)
+    residual <- as.numeric(Y - yhat)
+    rss      <- sum(residual^2)
+    gTSS     <- sum((Y - mean(Y))^2)
+    if (!is.finite(rss) || !is.finite(gTSS) || gTSS == 0) {
+      AICc <- Inf
+    } else {
+      rss.eff <- max(rss, aicc.rss.floor * gTSS)
+      sigma2  <- rss.eff / dp.n
+      AICc <- dp.n * log(sigma2) + dp.n * log(2 * pi) +
+              dp.n * ((dp.n + tr.S) / (dp.n - 2 - tr.S))
+      if (!is.finite(AICc)) AICc <- Inf
+    }
   }
-  else
-    AICc<-Inf
   if(verbose)
   {
     if(adaptive)

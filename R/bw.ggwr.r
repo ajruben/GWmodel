@@ -2,10 +2,20 @@
 #Author: Binbin Lu
 bw.ggwr<-function(formula, data, family ="poisson", approach="CV",kernel="bisquare",adaptive=FALSE, p=2, theta=0, longlat=F,dMat)
 {
-	if (is(data, "Spatial"))
+	 if(inherits(data, "Spatial"))
   {
-    dp.locat<-coordinates(data)
-    data <- as(data, "data.frame")
+    if (is(data, "Spatial"))
+    {
+     dp.locat<-coordinates(data)
+     data <- as(data, "data.frame")
+    }
+  }
+  else if(inherits(data, "sf"))
+  {
+    if(any((st_geometry_type(data)=="POLYGON")) | any(st_geometry_type(data)=="MULTIPOLYGON"))
+      dp.locat <- st_coordinates(st_centroid(st_geometry(data)))
+    else
+      dp.locat <- st_coordinates(st_geometry(data))
   }
   else
   {
@@ -352,7 +362,6 @@ gwr.poisson.wt<-function(y,x,bw,W.mat, verbose=T)
     llik <- 0.0
     mu <- y + 0.1
     nu <- log(mu)
-    
     if(verbose)
        cat(" Iteration    Log-Likelihood(With bandwidth: ",bw,")\n=========================\n")
     wt2 <- rep(1,dp.n)
@@ -364,7 +373,7 @@ gwr.poisson.wt<-function(y,x,bw,W.mat, verbose=T)
         gwsi<-gw_reg(x,y.adj,W.i*wt2,FALSE,i)
         betas1[i,]<-gwsi[[1]]
      }
-     nu <- gw.fitted(x,betas1)
+     nu <- gw_fitted(x,betas1)
      mu <- exp(nu)
      old.llik <- llik
      #llik <- sum(y*nu - mu - log(gamma(y+1)))
@@ -408,7 +417,7 @@ gwr.binomial.wt<-function(y,x,bw,W.mat, verbose=T)
         gwsi<-gw_reg(x,y.adj,W.i*wt2,FALSE,i)
         betas1[i,]<-gwsi[[1]]
      }
-     nu <- gw.fitted(x,betas1)
+     nu <- gw_fitted(x,betas1)
      mu <- exp(nu)/(1 + exp(nu))
      old.llik <- llik
      llik <- sum(lchoose(n,y) + (n-y)*log(1 - mu/n) + y*log(mu/n))

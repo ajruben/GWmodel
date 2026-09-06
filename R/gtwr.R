@@ -15,7 +15,9 @@
 ###########################################
 #Calibrate the GTWR model
 gtwr<- function(formula, data, regression.points, obs.tv, reg.tv, st.bw, kernel="bisquare",
-                 adaptive=FALSE, p=2, theta=0, longlat=F,lamda=0.05,t.units = "auto",ksi=0, st.dMat)
+                 adaptive=FALSE, p=2, theta=0, longlat=F,lamda=0.05,t.units = "auto",ksi=0, st.dMat,
+                 cores = 1L, verbose = interactive(),
+                 aicc.rss.floor = 1e-8, aicc.enp.margin = 1)
 {
   ##Record the start time
   timings <- list()
@@ -24,18 +26,26 @@ gtwr<- function(formula, data, regression.points, obs.tv, reg.tv, st.bw, kernel=
   this.call <- match.call()
   p4s <- as.character(NA)
   polygons <- NULL
+  sfdf <- TRUE
   ##Data points{
-  if (is(data, "Spatial"))
+  if (inherits(data, "Spatial"))
   {
     p4s <- proj4string(data)
     dp.locat<-coordinates(data)
     if(is(data, "SpatialPolygonsDataFrame"))
        polygons <- polygons(data)
     data <- as(data, "data.frame")
+    sfdf <- FALSE
+  }
+  else if(inherits(data, "sf")) {
+    if(any((st_geometry_type(data)=="POLYGON")) | any(st_geometry_type(data)=="MULTIPOLYGON"))
+       dp.locat <- st_coordinates(st_centroid(st_geometry(data)))
+    else
+       dp.locat <- st_coordinates(st_geometry(data))
   }
   else
   {
-    stop("Given regression data must be Spatial*DataFrame")
+    stop("Given regression data must be a Spatial*DataFrame or sf object")
   }
   dp.n <- nrow(dp.locat)
   ####Check the time stamps given for the data
@@ -57,26 +67,42 @@ gtwr<- function(formula, data, regression.points, obs.tv, reg.tv, st.bw, kernel=
   }
   #####Check the given data frame and regression points
   #####Regression points
+  
   if (missing(regression.points))
   {
     rp.given <- FALSE
     rp.locat<-dp.locat
     hatmatrix<-T
     reg.tv <- obs.tv
+    if(sfdf){
+      regression.points <- data
+    }
+    else{
+      if(is.null(polygons))
+         regression.points <- SpatialPointsDataFrame(coords=rp.locat, data=data)
+      else
+        regression.points <-SpatialPolygonsDataFrame(Sr=polygons, data=data,match.ID=F)
+    }
   }
   else 
   {
     rp.given <- TRUE
     hatmatrix<-F
-    if (is(regression.points, "Spatial"))
+     if(inherits(regression.points, "Spatial")) 
     {
       rp.locat<-coordinates(regression.points)
       if (is(regression.points, "SpatialPolygonsDataFrame"))
          polygons<-polygons(regression.points)
     }
+    else if (inherits(regression.points, "sf"))
+    {
+      if (any((st_geometry_type(regression.points)=="POLYGON")) | any(st_geometry_type(regression.points)=="MULTIPOLYGON"))
+         rp.locat <- st_coordinates(st_centroid(st_geometry(regression.points)))
+      else
+         rp.locat<- st_coordinates(st_centroid(st_geometry(regression.points)))
+    }
     else if (is.numeric(regression.points) && dim(regression.points)[2] == 2)
       rp.locat<-regression.points
-    
     else
     {
       warning("Output loactions are not packed in a Spatial object,and it has to be a two-column numeric vector")
@@ -110,6 +136,7 @@ gtwr<- function(formula, data, regression.points, obs.tv, reg.tv, st.bw, kernel=
 #    if (class(obs.tv)=="yearqtr")
 #      t.units <- "quarters"
 #  }
+  ###
   ####################
   ######Extract the data frame
   ####Refer to the function lm
@@ -129,8 +156,7 @@ gtwr<- function(formula, data, regression.points, obs.tv, reg.tv, st.bw, kernel=
   betas <-matrix(nrow=rp.n, ncol=var.n)
   betas.SE <-matrix(nrow=rp.n, ncol=var.n)
   betas.TV <-matrix(nrow=rp.n, ncol=var.n)
-  ##S: hatmatrix
-  S<-matrix(nrow=dp.n,ncol=dp.n)
+  ##S: hatmatrix  never used.
   #C.M<-matrix(nrow=dp.n,ncol=dp.n)
   idx1 <- match("(Intercept)", colnames(x))
   if(!is.na(idx1))
@@ -152,9 +178,14 @@ gtwr<- function(formula, data, regression.points, obs.tv, reg.tv, st.bw, kernel=
     if(dp.n+rp.n <10000)
     {
       if(rp.given)
-        st.dMat <- st.dist(dp.locat, rp.locat, obs.tv, reg.tv, p=p, theta=theta, longlat=longlat,lamda=lamda,t.units = t.units,ksi=ksi)
+      {
+          st.dMat <- st.dist(dp.locat, rp.locat, obs.tv, reg.tv, p=p, theta=theta, longlat=longlat,lamda=lamda,t.units = t.units,ksi=ksi)
+      }
       else
-        st.dMat <- st.dist(dp.locat, obs.tv=obs.tv, p=p, theta=theta, longlat=longlat,lamda=lamda,t.units = t.units,ksi=ksi)
+      {
+          st.dMat <- st.dist(dp.locat, obs.tv=obs.tv, p=p, theta=theta, longlat=longlat, lamda=lamda,t.units = t.units,ksi=ksi)
+      }
+        
       DM.given <- T
     }
   }
@@ -165,21 +196,68 @@ gtwr<- function(formula, data, regression.points, obs.tv, reg.tv, st.bw, kernel=
     if (dim.stdMat[1]!=dp.n||dim.stdMat[2]!=rp.n)
       stop("Dimensions of spatio-temporal distance matrix sdMat are not correct")
   }
-  #############Calibration the model
-  for (i in 1:rp.n)
-  {
-    if(DM.given)
-      st.disti <- st.dMat[,i]
-    else
-      st.disti <- st.dist(dp.locat, rp.locat, obs.tv, reg.tv, focus=i,p=p, theta=theta, longlat=F,lamda=longlat,t.units = t.units,ksi=ksi)
-    W.i<-gw.weight(st.disti,st.bw,kernel,adaptive)
-    gw.resi<-gw_reg(x,y,W.i,hatmatrix,i)
-    betas[i,]<-gw.resi[[1]] ######See function by IG
-    if(hatmatrix)
-    {
-      S[i,]<-gw.resi[[2]]
-      Ci<-gw.resi[[3]]
-      betas.SE[i,]<-diag(Ci%*%t(Ci))
+  # Local fits are dispatched in contiguous chunks rather than one point at a time. 
+  #- each worker is handed only its own columns of st.dMat, so per-worker memory is 8*n^2/cores rather than 8*n^2 
+  #- the hat matrix is never materialised
+  w_env <- list2env(mget(c("x", "y", "st.bw", "kernel", "adaptive", "hatmatrix",
+                           "dp.n", "DM.given", "dp.locat", "rp.locat", "obs.tv",
+                           "reg.tv", "p", "theta", "longlat", "lamda", "t.units", "ksi")),
+                    parent = globalenv())
+  fit_chunk <- function(idx, dcols) {
+    m <- length(idx); nb <- ncol(x)
+    o <- list(idx   = idx,
+              betas = matrix(NA_real_, m, nb),
+              se    = if (hatmatrix) matrix(NA_real_, m, nb) else NULL,
+              sdiag = if (hatmatrix) numeric(m) else NULL,
+              yhat  = if (hatmatrix) numeric(m) else NULL,
+              colS2 = if (hatmatrix) numeric(dp.n) else NULL,
+              sumS2 = 0, nfail = 0L, emsg = NULL)
+    for (k in seq_len(m)) {
+      i <- idx[k]
+      st.disti <- if (DM.given) dcols[, k]
+                  else st.dist(dp.locat, rp.locat, obs.tv, reg.tv, focus = i,
+                               p = p, theta = theta, longlat = longlat, lamda = lamda,
+                               t.units = t.units, ksi = ksi)
+      f <- .gtwr_point_fit(i, x, y, st.disti, st.bw, kernel, adaptive, hatmatrix)
+      if (!is.null(f$.failed)) {
+        o$nfail <- o$nfail + 1L
+        if (is.null(o$emsg)) o$emsg <- f$.failed
+      }
+      o$betas[k, ] <- f$beta
+      if (hatmatrix) {
+        sr <- f$S_row
+        o$se[k, ]  <- f$se_sq
+        o$sdiag[k] <- sr[i]
+        o$yhat[k]  <- sum(sr * y)
+        sr2        <- sr * sr
+        o$sumS2    <- o$sumS2 + sum(sr2)
+        o$colS2    <- o$colS2 + sr2
+      }
+    }
+    o
+  }
+  environment(fit_chunk) <- w_env
+  slice_fn <- if (DM.given) function(ix) st.dMat[, ix, drop = FALSE]
+              else function(ix) NULL
+  chunk_res <- .gtwr_dispatch_chunks(fit_chunk, rp.n, cores, verbose, slice_fn)
+  nfail <- sum(vapply(chunk_res, function(r) r$nfail, integer(1)))
+  if (nfail > 0L) {
+    ex <- Filter(Negate(is.null), lapply(chunk_res, function(r) r$emsg))[[1]]
+    warning(sprintf("Local fit failed at %d / %d regression points (bandwidth too small or design singular). First error: %s",
+                    nfail, rp.n, ex))
+  }
+  if (hatmatrix) {
+    s.diag <- numeric(dp.n); yhat.v <- numeric(dp.n)
+    colS2  <- numeric(dp.n); sumS2  <- 0
+  }
+  for (r in chunk_res) {
+    betas[r$idx, ] <- r$betas
+    if (hatmatrix) {
+      betas.SE[r$idx, ] <- r$se
+      s.diag[r$idx]     <- r$sdiag
+      yhat.v[r$idx]     <- r$yhat
+      colS2             <- colS2 + r$colS2
+      sumS2             <- sumS2 + r$sumS2
     }
   }
   ########################Diagnostic information
@@ -187,32 +265,62 @@ gtwr<- function(formula, data, regression.points, obs.tv, reg.tv, st.bw, kernel=
   GTW.diagnostic<-NA
   if (hatmatrix)
   {
-    tr.S<-sum(diag(S))
-    tr.StS<-sum(S^2)
-    Q<-t(diag(dp.n)-S)%*%(diag(dp.n)-S)
-    RSS.gw<-t(y)%*%Q%*%y
-    yhat<-S%*%y
+    # S was never formed; the chunked dispatch accumulated its reductions.
+    # With A = I - S,  y'A'A y == ||A y||^2 == sum(residual^2)  and
+    # diag(A'A) == colSums(S^2) - 2*diag(S) + 1, so RSS and the leverage
+    # terms cost O(n) here. The original built Q = A'A explicitly: an O(n^3)
+    # matmul plus three n x n matrices. RSS.gw is kept as a 1x1 matrix so
+    # downstream code indexing it as such still works.
+    tr.S   <- sum(s.diag)
+    tr.StS <- sumS2
+    yhat<-yhat.v
     residual<-y-yhat
-    #####Calculate the standard errors of the parameter estimates
-    #pseudo-t values
-    sigma.hat1<-RSS.gw/(dp.n-2*tr.S+tr.StS)
-    Stud_residual<-residual
-    q.diag<-diag(Q)
-    for(i in 1:dp.n)
-    {
-      Stud_residual[i]<-residual[i]/sqrt(sigma.hat1*q.diag[i])
-      betas.SE[i,]<-sqrt(sigma.hat1*betas.SE[i,])
-      betas.TV[i,]<-betas[i,]/betas.SE[i,] 
+    RSS.gw<-matrix(sum(residual^2), 1L, 1L)
+    edf.raw <- dp.n - 2 * tr.S + tr.StS
+    if (!is.finite(edf.raw) || edf.raw <= aicc.enp.margin) {
+      warning(sprintf("Effective degrees of freedom (%.2f) at or below %g; standard errors set to NA.",
+                      edf.raw, aicc.enp.margin))
+      sigma.hat1    <- NA_real_
+      Stud_residual <- rep(NA_real_, dp.n)
+      betas.SE[]    <- NA_real_
+      betas.TV[]    <- NA_real_
+    } else {
+      sigma.hat1    <- RSS.gw / edf.raw
+      q.diag        <- colS2 - 2 * s.diag + 1
+      Stud_residual <- as.numeric(residual) / sqrt(as.numeric(sigma.hat1) * q.diag)
+      betas.SE      <- sqrt(as.numeric(sigma.hat1) * betas.SE)
+      betas.TV      <- betas / betas.SE
     }
-    sigma.hat2 <- RSS.gw/dp.n
-    AIC<-dp.n*log(sigma.hat2) + dp.n*log(2*pi) +dp.n+tr.S
-    AICc<-dp.n*log(sigma.hat2) + dp.n*log(2*pi) + dp.n *((dp.n + tr.S) / (dp.n - 2 - tr.S))
-    edf<- dp.n - 2*tr.S + tr.StS
-    enp<-2*tr.S - tr.StS
     yss.g <- sum((y - mean(y))^2)
-    gw.R2<-1-RSS.gw/yss.g; ##R Square valeu
-    gwR2.adj<-1-(1-gw.R2)*(dp.n-1)/(edf-1) #Adjusted R squared value
-    GTW.diagnostic<-list(RSS.gw=RSS.gw,AIC=AIC,AICc=AICc,enp=enp, edf=edf,gw.R2=gw.R2,gwR2.adj=gwR2.adj)
+    RSS.num <- as.numeric(RSS.gw)
+    if (!is.finite(RSS.num)) {
+      RSS.eff <- NA_real_
+    } else {
+      RSS.eff <- max(RSS.num, aicc.rss.floor * yss.g)
+      if (RSS.eff > RSS.num)
+        warning(sprintf("Reported RSS (%.3g) is below %g * TSS; using floor %.3g for AIC/AICc.",
+                        RSS.num, aicc.rss.floor, RSS.eff))
+    }
+    sigma.hat2 <- if (is.finite(RSS.eff)) RSS.eff / dp.n else NA_real_
+    enp.max <- dp.n - 2 - aicc.enp.margin
+    if (!is.finite(tr.S) || tr.S >= enp.max || !is.finite(RSS.eff)) {
+      warning(sprintf("AIC/AICc unreliable at this bandwidth (tr(S)=%.2f, n - 2 - %g = %.2f, RSS.eff=%.3g); set to NA.",
+                      as.numeric(tr.S), aicc.enp.margin, enp.max, as.numeric(RSS.eff)))
+      AIC <- NA_real_; AICc <- NA_real_
+    } else {
+      AIC  <- dp.n * log(sigma.hat2) + dp.n * log(2 * pi) + dp.n + tr.S
+      AICc <- dp.n * log(sigma.hat2) + dp.n * log(2 * pi) +
+              dp.n * ((dp.n + tr.S) / (dp.n - 2 - tr.S))
+    }
+    edf <- dp.n - 2 * tr.S + tr.StS
+    enp <- 2 * tr.S - tr.StS
+    gw.R2 <- if (is.finite(RSS.num) && yss.g > 0) 1 - RSS.num / yss.g else NA_real_
+    gwR2.adj <- if (is.finite(edf) && edf > 1 && is.finite(gw.R2))
+                  1 - (1 - gw.R2) * (dp.n - 1) / (edf - 1)
+                else NA_real_
+    GTW.diagnostic <- list(RSS.gw = RSS.gw, RSS.eff = RSS.eff,
+                           AIC = AIC, AICc = AICc, enp = enp, edf = edf,
+                           gw.R2 = gw.R2, gwR2.adj = gwR2.adj)
   }
   
   ####encapsulate the GWR results
@@ -238,30 +346,58 @@ gtwr<- function(formula, data, regression.points, obs.tv, reg.tv, st.bw, kernel=
   }
   rownames(rp.locat)<-rownames(gtwres.df)
   
-
-  if (!is.null(polygons))
+  if(inherits(regression.points, "Spatial")) 
   {
-    rownames(gtwres.df) <- sapply(slot(polygons, "polygons"),
+     if (!is.null(polygons))
+    {
+       rownames(gtwres.df) <- sapply(slot(polygons, "polygons"),
                                   function(i) slot(i, "ID"))
-    SDF <-SpatialPolygonsDataFrame(Sr=polygons, data=gtwres.df,match.ID=F)
+       SDF <-SpatialPolygonsDataFrame(Sr=polygons, data=gtwres.df,match.ID=F)
+    }
+    else
+    {
+      SDF <- SpatialPointsDataFrame(coords=rp.locat, data=gtwres.df, proj4string=CRS(p4s), match.ID=F)
+    }
+  }
+  else if(inherits(regression.points, "sf"))
+  {
+     SDF <- st_sf(gtwres.df, geometry = st_geometry(regression.points))
   }
   else
-  {
-    SDF <- SpatialPointsDataFrame(coords=rp.locat, data=gtwres.df, proj4string=CRS(p4s), match.ID=F)
-  }
+     SDF <- SpatialPointsDataFrame(coords=rp.locat, data=gtwres.df, proj4string=CRS(p4s), match.ID=F)
+  
   timings[["stop"]] <- Sys.time()
   ##############
   res<-list(GTW.arguments=GTW.arguments,GTW.diagnostic=GTW.diagnostic,lm=lm.res,SDF=SDF,
             timings=timings,this.call=this.call)
   class(res) <-"gtwrm"
-  invisible(res) 
+  invisible(res)
+}
+
+.gtwr_point_fit <- function(i, x, y, st.disti, st.bw, kernel, adaptive, hatmatrix)
+{
+  W.i <- gw.weight(st.disti, st.bw, kernel, adaptive)
+  res <- tryCatch(gw_reg(x, y, W.i, hatmatrix, i), error = function(e) e)
+  if (inherits(res, "error")) {
+    p <- ncol(x); n <- nrow(x)
+    out <- list(beta = rep(NA_real_, p), .failed = conditionMessage(res))
+    if (hatmatrix) { out$S_row <- rep(NA_real_, n); out$se_sq <- rep(NA_real_, p) }
+    return(out)
+  }
+  out <- list(beta = res[[1]])
+  if (hatmatrix) {
+    out$S_row <- res[[2]]
+    Ci        <- res[[3]]
+    out$se_sq <- diag(Ci %*% t(Ci))
+  }
+  out
 }
 
 ############################Layout function for outputing the GWR results
-##Author: BL	
+##Author: BL
 print.gtwrm<-function(x, ...)
 {
-  if(class(x) != "gtwrm") stop("It's not a gwm object")
+  if(!inherits(x, "gtwrm")) stop("It's not a gwm object")
   cat("   ***********************************************************************\n")
   cat("   *                       Package   GWmodel                             *\n")
   cat("   ***********************************************************************\n")
@@ -331,7 +467,10 @@ print.gtwrm<-function(x, ...)
   } 
   
   cat("\n   ****************Summary of GTWR coefficient estimates:*****************\n")       
-  df0 <- as(x$SDF, "data.frame")[,1:var.n, drop=FALSE]
+  if(inherits(x$SDF, "Spatial"))
+       df0 <- as(x$SDF, "data.frame")[,1:var.n, drop=FALSE]
+    else
+       df0 <- st_drop_geometry(x$SDF)[,1:var.n, drop=FALSE]
   if (any(is.na(df0))) {
     df0 <- na.omit(df0)
     warning("NAs in coefficients dropped")
@@ -366,70 +505,34 @@ print.gtwrm<-function(x, ...)
   invisible(x)
 }
 
-#Calculate the time distance vector 
 ti.distv <- function(focal.t, obs.tv, units="auto")
 {
-  n <- length(obs.tv)
-  dist.tv <- c()
-  for (t in obs.tv) 
-  {
-    if(focal.t >=t)
-       dist.tv <- c(dist.tv, ti.dist(t,focal.t,units = units))
-    else
-       dist.tv <- c(dist.tv, Inf)
-  }
-  dist.tv
+  d <- ti.dist(obs.tv, focal.t, units = units)
+  d[obs.tv > focal.t] <- Inf
+  d
 }
-#Calculate the time distance matrix
-ti.distm <- function(obs.tv,reg.tv, units="auto")
+ti.distm <- function(obs.tv, reg.tv, units="auto")
 {
-  n <- length(obs.tv)
-  if(missing(reg.tv))
-  {
-    m.sys <- T
-    m <- n
-    reg.tv <- obs.tv
-  }
-  else
-  {
-    m.sys <- F
-    m <- length(reg.tv)
-  }
-  dist.tm <- matrix(numeric(m*n),nrow=n)
-  #if(m.sys)
-#  {
-#    for(i in 1:n)
-#      for(j in 1:i)
-#      {
-#        dist.tm[i,j] <- ti.dist(obs.tv[i],obs.tv[j],units = units)
-#        dist.tm[j,i] <- dist.tm[i,j]
-#      }
-#  }
-#  else
-#  {
-#    for (i in 1:m) 
-#      for (j in 1:n) 
-#      {
-#        dist.tm[i,j] <- ti.dist(obs.tv[i],obs.tv[j],units = units)
-#      }
-#  }
-  for(i in 1:m)
-    dist.tm[,i] <- ti.distv(reg.tv[i], obs.tv, units)
+  if (missing(reg.tv)) reg.tv <- obs.tv
+  n <- length(obs.tv); m <- length(reg.tv)
+  dist.tm <- matrix(numeric(m * n), nrow = n)
+  for (i in seq_len(m))
+    dist.tm[, i] <- ti.distv(reg.tv[i], obs.tv, units)
   dist.tm
 }
 #calculate the time distance
 #units can be "auto", "secs", "mins", "hours","days", "weeks","months","years"
 ti.dist <- function(t1,t2,units="auto")
 {
-  tcl <- class(t1)
+  tcl <- class(t1)[1]
   switch(tcl,
-         Date = as.numeric(difftime(t1,t2,units = units)),
-         POSIXlt = as.numeric(difftime(t1,t2,units = units)),
-         POSIXct = as.numeric(difftime(t1,t2,units = units)),
-         numeric = t2-t1,
-         integer = t2-t1,
-         yearmon = (t2-t1)*12,
-         yearqtr = (t2-t1)*4
+         Date = abs(as.numeric(difftime(t1,t2,units = units))),
+         POSIXlt = abs(as.numeric(difftime(t1,t2,units = units))),
+         POSIXct = abs(as.numeric(difftime(t1,t2,units = units))),
+         numeric = abs(t2-t1),
+         integer = abs(t2-t1),
+         yearmon = abs((t2-t1)*12),
+         yearqtr = abs((t2-t1)*4)
          )
 }
 #Get the forward time stamps before a specific time stamp
@@ -445,33 +548,18 @@ get.before.ti <- function(ti, ts, time.lag,units)
   }
   ts.ti
 }
-#Get the time stamps for the ST data frame, return the sorted time stamps and index
 get.ts <- function(tv)
 {
-  t.fac <- as.factor(tv)
-  ts <- as(sort(levels(t.fac)), class(tv))
-  n <- length(ts)
-  idxs <- c()
-  for(i in tv)
-  {
-    idxs <- c(idxs, which(ts==i))
-  }
-  res <- list(ts=ts, index=idxs) 
-  res
+  ts <- sort(unique(tv))
+  list(ts = ts, index = match(tv, ts))
 }
-#Get the unique locations and index
 get.uloat <- function(coords)
 {
-  TF.dup <- duplicated(coords)
-  ucoords <- coords[!TF.dup,]
-  n <- nrow(coords)
-  idx <- c()
-  for(i in 1:n)
-  {
-    idx <-c(idx, which(ucoords[,1]==coords[i,1]&ucoords[,2]==coords[i,2]))
-  }
-  res <- list(ucoords, idx)
-  res
+  TF.dup   <- duplicated(coords)
+  ucoords  <- coords[!TF.dup, , drop = FALSE]
+  keys.all <- paste(coords[, 1],  coords[, 2],  sep = "\r")
+  keys.u   <- paste(ucoords[, 1], ucoords[, 2], sep = "\r")
+  list(ucoords, match(keys.all, keys.u))
 }
 ##Calculate the spatial distance matrix with duplicated locations removed
 sdist.mat <- function(dp.locat, rp.locat, p=2, theta=0, longlat=F)
@@ -597,65 +685,48 @@ st.dist <- function(dp.locat, rp.locat, obs.tv, reg.tv,focus=0, p=2, theta=0, lo
    {
      if(rp.given)
      {
-       for(i in 1:n.dp)
-       {
-       if(is.infinite(t.dMat[uts.obv.idx[i], uts.reg.idx[focus]]))
-            {
-               dists[i] <- Inf
-            }
-       else
-       {
-         dists[i] <- lamda*s.dMat[coord.dp.idx[i],coord.rp.idx[focus]]+(1-lamda)*t.dMat[uts.obv.idx[i], uts.reg.idx[focus]]+2*sqrt(lamda*(1-lamda)*s.dMat[coord.dp.idx[i],coord.rp.idx[focus]]*t.dMat[uts.obv.idx[i], uts.reg.idx[focus]])*cos(ksi)
-         }
-       }
+       s_vec <- s.dMat[coord.dp.idx, coord.rp.idx[focus]]
+       t_vec <- t.dMat[uts.obv.idx, uts.reg.idx[focus]]
      }
      else
      {
-       for(i in 1:n.dp)
-       {
-          if(is.infinite(t.dMat[uts.obv.idx[i], uts.obv.idx[focus]]))
-            {
-               dists[i] <- Inf
-            }
-            else
-            {
-         dists[i] <- lamda*s.dMat[coord.dp.idx[i],coord.dp.idx[focus]]+(1-lamda)*t.dMat[uts.obv.idx[i], uts.obv.idx[focus]]+2*sqrt(lamda*(1-lamda)*s.dMat[coord.dp.idx[i],coord.dp.idx[focus]]*t.dMat[uts.obv.idx[i], uts.obv.idx[focus]])*cos(ksi)
-         }
-       }
+       s_vec <- s.dMat[coord.dp.idx, coord.dp.idx[focus]]
+       t_vec <- t.dMat[uts.obv.idx, uts.obv.idx[focus]]
      }
+     finite <- is.finite(t_vec)
+     dists[] <- Inf
+     sf <- s_vec[finite]; tf <- t_vec[finite]
+     dists[finite] <- lamda*sf + (1-lamda)*tf +
+                      2*sqrt(lamda*(1-lamda)*sf*tf)*cos(ksi)
    }
    else
    {
-      if(rp.given)
-      {
-        for(j in 1:n.rp)
-          for(i in 1:n.dp)
-          {
-            if(is.infinite(t.dMat[uts.obv.idx[i], uts.reg.idx[j]]))
-            {
-               dists[i,j] <- Inf
-            }
-            else
-            {
-            dists[i,j] <- lamda*s.dMat[coord.dp.idx[i],coord.rp.idx[j]]+(1-lamda)*t.dMat[uts.obv.idx[i], uts.reg.idx[j]]+2*sqrt(lamda*(1-lamda)*s.dMat[coord.dp.idx[i],coord.rp.idx[j]]*t.dMat[uts.obv.idx[i], uts.reg.idx[j]])*cos(ksi)
-            }
-          }
-      }
-     else
+     # one column block at a time. Holding S, Tm, t(Tm), the two logical masks and the arithmetic temporaries all at n x n s.dMat and t.dMat, o a block re-expands a small matrix rather than keeping a second copy of the large one. 
+     blk  <- max(1L, min(n.rp, as.integer(ceiling(1e7 / max(1L, n.dp)))))
+     rows <- seq_len(n.dp)
+     for (.start in seq(1L, n.rp, by = blk))
      {
-       for(j in 1:n.dp)
-         for(i in 1:j)
-         {
-           if(is.infinite(t.dMat[uts.obv.idx[i], uts.obv.idx[j]]))
-            {
-               dists[i,j] <- Inf
-            }
-            else
-            {
-           dists[i,j] <- lamda*s.dMat[coord.dp.idx[i],coord.dp.idx[j]]+(1-lamda)*t.dMat[uts.obv.idx[i], uts.obv.idx[j]]+2*sqrt(lamda*(1-lamda)*s.dMat[coord.dp.idx[i],coord.dp.idx[j]]*t.dMat[uts.obv.idx[i], uts.obv.idx[j]])*cos(ksi)
-            }
-           dists[j,i] <- dists[i,j]
-         }
+       cols <- .start:min(.start + blk - 1L, n.rp)
+       m    <- length(cols)
+       if(rp.given)
+       {
+         S  <- s.dMat[coord.dp.idx, coord.rp.idx[cols], drop=FALSE]
+         Tm <- t.dMat[uts.obv.idx, uts.reg.idx[cols], drop=FALSE]
+       }
+       else
+       {
+         S  <- s.dMat[coord.dp.idx, coord.dp.idx[cols], drop=FALSE]
+         I  <- matrix(rows, nrow=n.dp, ncol=m)
+         Cc <- matrix(cols, nrow=n.dp, ncol=m, byrow=TRUE)
+         a  <- uts.obv.idx
+         Tm <- matrix(t.dMat[cbind(a[pmin(I,Cc)], a[pmax(I,Cc)])], n.dp, m)
+       }
+       finite <- is.finite(Tm)
+       db <- matrix(Inf, n.dp, m)
+       sf <- S[finite]; tf <- Tm[finite]
+       db[finite] <- lamda*sf + (1-lamda)*tf +
+                     2*sqrt(lamda*(1-lamda)*sf*tf)*cos(ksi)
+       dists[, cols] <- db
      }
    }
    dists

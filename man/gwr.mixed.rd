@@ -20,7 +20,7 @@ gwr.mixed(formula, data, regression.points, fixed.vars,
 }
 \arguments{
   \item{formula}{Regression model formula of a \link{formula} object }
-  \item{data}{a Spatial*DataFrame, i.e. SpatialPointsDataFrame or SpatialPolygonsDataFrame as defined in package \pkg{sp}}
+  \item{data}{a Spatial*DataFrame, i.e. SpatialPointsDataFrame or SpatialPolygonsDataFrame as defined in package \pkg{sp}, or a sf object defined in package \pkg{sf}}
   \item{regression.points}{a Spatial*DataFrame object, i.e. SpatialPointsDataFrame or SpatialPolygonsDataFrame as defined in package \pkg{sp}}
   \item{fixed.vars}{independent variables that appeared in the formula that are to be treated as global}
   \item{intercept.fixed}{logical, if TRUE the intercept will be treated as global}
@@ -50,8 +50,9 @@ A list of class \dQuote{mgwr}:
   \item{aic}{AICc value from this calibration}
   \item{df.used}{ effective degree of freedom}
   \item{rss}{residual sum of squares}
-  \item{SDF}{a SpatialPointsDataFrame (may be gridded) or 
-             SpatialPolygonsDataFrame object (see package \dQuote{sp}) integrated with coefficient estimates in its "data" slot.}
+  \item{SDF}{a SpatialPointsDataFrame (may be gridded), or 
+             SpatialPolygonsDataFrame object (see package \dQuote{sp}), or sf object  (see package \dQuote{sf}) 
+             integrated with coefficient estimates in its "data" slot.}
   \item{timings}{starting and ending time.}
   \item{this.call}{the function call used.}
 }

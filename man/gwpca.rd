@@ -10,20 +10,22 @@
 This function implements basic or robust GWPCA.
 }
 \usage{
-gwpca(data, elocat, vars, k = 2, robust = FALSE, kernel = "bisquare",
+gwpca(data, elocat, vars, k = 2, robust = FALSE, scaling=T, kernel = "bisquare",
                   adaptive = FALSE, bw, p = 2, theta = 0, longlat = F, cv = T, scores=F,
                   dMat)
 \method{print}{gwpca}(x, \dots)
 }
 
 \arguments{
-  \item{data}{a Spatial*DataFrame, i.e. SpatialPointsDataFrame or SpatialPolygonsDataFrame as defined in package \pkg{sp}}
+  \item{data}{a Spatial*DataFrame, i.e. SpatialPointsDataFrame or SpatialPolygonsDataFrame as defined in package \pkg{sp}, or a sf object defined in package \pkg{sf}}
   \item{elocat}{a two-column numeric array or Spatial*DataFrame object for providing evaluation locations, 
                        i.e. SpatialPointsDataFrame or SpatialPolygonsDataFrame 
                        as defined in package \pkg{sp}}
   \item{vars}{a vector of variable names to be evaluated}
   \item{k}{the number of retained components; k must be less than the number of variables}
   \item{robust}{if TRUE, robust GWPCA will be applied; otherwise basic GWPCA will be applied}
+  \item{scaling}{if TRUE,  the data is scaled to have zero mean and unit variance (standardized); 
+                otherwise the data is centered but not scaled}
   \item{kernel}{function chosen as follows:
   
                 gaussian: wgt = exp(-.5*(vdist/bw)^2);
@@ -52,7 +54,8 @@ A list of class \dQuote{gwpca}:
   \item{pca}{an object of class inheriting from \dQuote{princomp}, see \link{princomp}. }
   \item{loadings}{the localised loadings}
   \item{SDF}{a SpatialPointsDataFrame (may be gridded) or 
-             SpatialPolygonsDataFrame object (see package \dQuote{sp}) integrated with local proportions of variance for each 
+             SpatialPolygonsDataFrame object (see package \dQuote{sp}) or sf object  (see package \dQuote{sf}) 
+             integrated with local proportions of variance for each 
              principle components, cumulative proportion and winning variable for the 1st principle component in its "data" slot.}
   \item{gwpca.scores}{the localised scores of the supplied data on the principal components }
   \item{var}{The local amount of variance accounted for by each component}

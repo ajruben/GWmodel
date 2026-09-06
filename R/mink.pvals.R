@@ -4,10 +4,17 @@ gwr.mink.pval <- function(formula, data, criterion="AIC", bw, bw.sel.approach = 
                        adaptive=F, kernel="bisquare", left.interval=0.25,
                        right.interval=0.5,drop.tol=3, theta0=0,verbose=F,nlower = 10)
 {
-  if (is(data, "Spatial"))
+  if(inherits(data, "Spatial"))
   {
     dp.locat<-coordinates(data)
     data <- as(data, "data.frame")
+  }
+  else if(inherits(data, "sf"))
+  {
+    if(any((st_geometry_type(data)=="POLYGON")) | any(st_geometry_type(data)=="MULTIPOLYGON"))
+       dp.locat <- st_coordinates(st_centroid(st_geometry(data)))
+    else
+       dp.locat <- st_coordinates(st_centroid(st_geometry(data)))
   }
   else
   {
@@ -203,10 +210,17 @@ gwr.mink.pval.forward <- function(formula, data, bw, bw.sel.approach = "AIC",
                        adaptive=F, kernel="bisquare", p.max=Inf,p.min=2,
                        interval=0.5,drop.tol=3, theta0=0,verbose=F,nlower = 10)
 {
-  if (is(data, "Spatial"))
+  if(inherits(data, "Spatial"))
   {
     dp.locat<-coordinates(data)
     data <- as(data, "data.frame")
+  }
+  else if(inherits(data, "sf"))
+  {
+    if(any((st_geometry_type(data)=="POLYGON")) | any(st_geometry_type(data)=="MULTIPOLYGON"))
+       dp.locat <- st_coordinates(st_centroid(st_geometry(data)))
+    else
+       dp.locat <- st_coordinates(st_centroid(st_geometry(data)))
   }
   else
   {
@@ -290,10 +304,17 @@ gwr.mink.pval.backward <- function(formula, data, bw, bw.sel.approach = "AIC",
                        adaptive=F, kernel="bisquare", p.max=2,p.min=0.1,
                        interval=0.5,drop.tol=3, theta0=0,verbose=F,nlower = 10)
 {
-  if (is(data, "Spatial"))
+  if(inherits(data, "Spatial"))
   {
     dp.locat<-coordinates(data)
     data <- as(data, "data.frame")
+  }
+  else if(inherits(data, "sf"))
+  {
+    if(any((st_geometry_type(data)=="POLYGON")) | any(st_geometry_type(data)=="MULTIPOLYGON"))
+       dp.locat <- st_coordinates(st_centroid(st_geometry(data)))
+    else
+       dp.locat <- st_coordinates(st_centroid(st_geometry(data)))
   }
   else
   {

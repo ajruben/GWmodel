@@ -17,31 +17,60 @@ gwr.hetero <- function(formula, data, regression.points, bw, kernel="bisquare",
   {
   	rp.given <- FALSE
     regression.points <- data
-    rp.locat<-coordinates(data)
+    if(inherits(regression.points, "Spatial")) 
+    {
+      rp.locat<-coordinates(regression.points)
+      if (is(regression.points, "SpatialPolygonsDataFrame"))
+         polygons<-polygons(regression.points)
+    }
+    else if (inherits(regression.points, "sf"))
+    {
+      if (any((st_geometry_type(regression.points)=="POLYGON")) | any(st_geometry_type(regression.points)=="MULTIPOLYGON"))
+         rp.locat <- st_coordinates(st_centroid(st_geometry(regression.points)))
+      else
+         rp.locat<- st_coordinates(st_centroid(st_geometry(regression.points)))
+    }
+    else
+    {
+         stop("Given regression data must be a Spatial*DataFrame or sf object")
+    }
+
     hatmatrix<-T
   }
   else
   {
     rp.given <- TRUE
     hatmatrix<-F
-    if (is(regression.points, "Spatial"))
+    if (inherits(regression.points, "Spatial"))
     {
        rp.locat<-coordinates(regression.points)
+    }
+    else if (inherits(regression.points, "sf"))
+    {
+      if (any((st_geometry_type(regression.points)=="POLYGON")) | any(st_geometry_type(regression.points)=="MULTIPOLYGON"))
+         rp.locat <- st_coordinates(st_centroid(st_geometry(regression.points)))
+      else
+         rp.locat<- st_coordinates(st_centroid(st_geometry(regression.points)))
     }
     else if (is.numeric(regression.points) && dim(regression.points)[2] == 2)
        rp.locat<-regression.points
     else
-      {
-        warning("Output loactions are not packed in a Spatial object,and it has to be a two-column numeric vector")
-        rp.locat<-dp.locat
-      }
+    {
+      stop("Output loactions are not packed in a Spatial object,and it has to be a two-column numeric vector")
+    }
   }
   ##Data points{
-  if (is(data, "Spatial"))
+  if (inherits(data, "Spatial"))
   {
     p4s <- proj4string(data)
     dp.locat<-coordinates(data)
     data <- as(data, "data.frame")
+  }
+  else if(inherits(data, "sf")) {
+    if(any((st_geometry_type(data)=="POLYGON")) | any(st_geometry_type(data)=="MULTIPOLYGON"))
+       dp.locat <- st_coordinates(st_centroid(st_geometry(data)))
+    else
+       dp.locat <- st_coordinates(st_geometry(data))
   }
   else
   {
@@ -122,7 +151,7 @@ gwr.hetero <- function(formula, data, regression.points, bw, kernel="bisquare",
       reg.df <- as.data.frame(this.reg)
       rownames(rp.locat)<-rownames(reg.df)
       griddedObj <- F
-      if (is(regression.points, "Spatial"))
+      if(inherits(regression.points, "Spatial")) 
       { 
           if (is(regression.points, "SpatialPolygonsDataFrame"))
           {
@@ -138,6 +167,10 @@ gwr.hetero <- function(formula, data, regression.points, bw, kernel="bisquare",
              SDF <- SpatialPointsDataFrame(coords=rp.locat, data=reg.df, proj4string=CRS(p4s), match.ID=F)
              gridded(SDF) <- griddedObj 
           }
+      }
+      else if(inherits(regression.points, "sf"))
+      {
+            SDF <- st_sf(reg.df, geometry = st_geometry(regression.points))
       }
       else
           SDF <- SpatialPointsDataFrame(coords=rp.locat, data=reg.df, proj4string=CRS(p4s), match.ID=F)

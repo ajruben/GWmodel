@@ -11,7 +11,7 @@ gwr.collin.diagno(formula, data, bw, kernel="bisquare",
 
 \arguments{
   \item{formula}{Regression model formula of a \link{formula} object }
-  \item{data}{a Spatial*DataFrame, i.e. SpatialPointsDataFrame or SpatialPolygonsDataFrame as defined in package \pkg{sp}}
+  \item{data}{a Spatial*DataFrame, i.e. SpatialPointsDataFrame or SpatialPolygonsDataFrame as defined in package \pkg{sp}, or a sf object defined in package \pkg{sf}}
   \item{bw}{bandwidth used in the weighting function, probably calculated 
             by \code{bw.gwr} or \code{bw.gwr.lcr}; fixed (distance) or 
             adaptive bandwidth (number of nearest neighbours)}
@@ -37,8 +37,9 @@ gwr.collin.diagno(formula, data, bw, kernel="bisquare",
   \item{VIF}{Local Variance inflation factors (VIFs) matrix}
   \item{local_CN}{Local condition numbers}
   \item{VDP}{Local variance-decomposition proportions}
-  \item{SDF}{a SpatialPointsDataFrame (may be gridded) or 
-             SpatialPolygonsDataFrame object (see package \dQuote{sp}) integrated with VIF, local_CN, VDP and corr.mat}
+  \item{SDF}{a SpatialPointsDataFrame (may be gridded), or 
+             SpatialPolygonsDataFrame object (see package \dQuote{sp}), or sf object  (see package \dQuote{sf})
+              integrated with VIF, local_CN, VDP and corr.mat}
 }
 \references{
 Wheeler D, Tiefelsdorf M (2005) Multicollinearity and correlation among local 

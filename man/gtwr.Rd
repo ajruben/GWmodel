@@ -4,12 +4,6 @@
 \alias{ti.distv}
 \alias{ti.distm}
 \alias{ti.dist}
-\alias{get.before.ti}
-\alias{get.ts}
-\alias{get.uloat}
-\alias{sdist.mat}
-\alias{tdist.mat}
-\alias{st.dist}
 \title{Geographically and Temporally Weighted Regression}
 \description{
   A function for calibrating a Geographically and Temporally Weighted Regression 
@@ -22,7 +16,7 @@ gtwr(formula, data, regression.points, obs.tv, reg.tv, st.bw, kernel="bisquare",
 }
 \arguments{
   \item{formula}{Regression model formula of a \link{formula} object }
-  \item{data}{a Spatial*DataFrame, i.e. SpatialPointsDataFrame or SpatialPolygonsDataFrame as defined in package \pkg{sp}}
+  \item{data}{a Spatial*DataFrame, i.e. SpatialPointsDataFrame or SpatialPolygonsDataFrame as defined in package \pkg{sp}, or a sf object defined in package \pkg{sf}}
   \item{regression.points}{a Spatial*DataFrame object, i.e. SpatialPointsDataFrame or SpatialPolygonsDataFrame as defined in package \pkg{sp}; Note that no diagnostic information will returned if it is assigned}
   \item{obs.tv}{a vector of time tags for each observation, which could be numeric or of \link{POSIXlt} class}
   \item{reg.tv}{a vector of time tags for each regression location, which could be numeric or of \link{POSIXlt} class}
@@ -48,7 +42,7 @@ gtwr(formula, data, regression.points, obs.tv, reg.tv, st.bw, kernel="bisquare",
   \item{t.units}{	character string to define time unit}
   \item{ksi}{an parameter between 0 and PI for calculating spatio-temporal distance, 
              see details in Wu et al. (2014)} 
-  \item{st.dMat}{a pre-specified spatio-temporal distance matrix}
+  \item{st.dMat}{a pre-specified spatio-temporal distance matrix, and can be calculated via the function \link{st.dist}}
 }
 \note{
 The function implements GTWR model proposed by Huang et al. (2010) and 
@@ -60,8 +54,8 @@ Wu et al. (2014).
   \item{GTW.arguments}{a list class object including the model fitting parameters for generating the report file}
   \item{GTW.diagnostic}{a list class object including the diagnostic information of the model fitting}
   \item{lm}{an object of class inheriting from \dQuote{lm}, see \link{lm}. }
-  \item{SDF}{a SpatialPointsDataFrame (may be gridded) or 
-             SpatialPolygonsDataFrame object (see package \dQuote{sp}) integrated with fit.points,
+  \item{SDF}{a SpatialPointsDataFrame (may be gridded), or 
+             SpatialPolygonsDataFrame object (see package \dQuote{sp}), or sf object  (see package \dQuote{sf}) integrated with regression.points,
              GTWR coefficient estimates, y value,predicted values, coefficient standard errors 
              and t-values in its "data" slot.}
   \item{timings}{starting and ending time.}
