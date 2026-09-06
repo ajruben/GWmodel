@@ -56,6 +56,7 @@ This fork is a mix of my own work and AI-assisted work. The split:
 - Identifying the GTWR performance bottleneck (2025).
 - The original refactor from nested loops to vectorised arithmetic — the
   approach, and the first working implementation.
+- Benchmarking and the equivalence tests (handover to AI at later point)
 
 **AI-assisted (Claude Code), under my direction and review**
 
@@ -65,12 +66,12 @@ This fork is a mix of my own work and AI-assisted work. The split:
   matrix, replacing the O(n³) residual projector with closed forms, and giving
   each worker only its own columns of the distance matrix.
 - The `lamda`/`longlat` correctness fix, and the Windows parallel path.
-- Benchmarking and the equivalence tests.
+
 
 **Why the vectorisation was redone with AI rather than restored**
 
 1. I no longer had the code for the original GTWR fix.
-2. AI has become good enough that, with my oversight and my familiarity with this
+2. AI (Claude Opus 4.7) has become good enough that, with my oversight and my familiarity with this
    project, I was comfortable having it redo the work.
 
 The bottleneck analysis and the decision to vectorise are mine and predate the AI

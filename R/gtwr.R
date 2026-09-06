@@ -156,8 +156,7 @@ gtwr<- function(formula, data, regression.points, obs.tv, reg.tv, st.bw, kernel=
   betas <-matrix(nrow=rp.n, ncol=var.n)
   betas.SE <-matrix(nrow=rp.n, ncol=var.n)
   betas.TV <-matrix(nrow=rp.n, ncol=var.n)
-  ##S: hatmatrix -- never materialised. Every use of S below is a
-  ##   reduction over its rows, accumulated by the chunked dispatch.
+  ##S: hatmatrix  never used.
   #C.M<-matrix(nrow=dp.n,ncol=dp.n)
   idx1 <- match("(Intercept)", colnames(x))
   if(!is.na(idx1))
@@ -197,18 +196,9 @@ gtwr<- function(formula, data, regression.points, obs.tv, reg.tv, st.bw, kernel=
     if (dim.stdMat[1]!=dp.n||dim.stdMat[2]!=rp.n)
       stop("Dimensions of spatio-temporal distance matrix sdMat are not correct")
   }
-  # Local fits are dispatched in contiguous chunks rather than one point at a
-  # time. Two things fall out of that:
-  #   * each worker is handed only its own columns of st.dMat, so per-worker
-  #     memory is 8*n^2/cores rather than 8*n^2 -- broadcasting the whole
-  #     matrix to every worker is what exhausted RAM on large fits;
-  #   * the hat matrix is never materialised. Every downstream use of S is a
-  #     reduction over its rows -- diag(S), sum(S^2), S %*% y, colSums(S^2) --
-  #     so each chunk accumulates those and returns O(n) numbers instead of an
-  #     n x n block travelling back over a socket.
-  # fit_chunk is given an environment holding only the small objects it needs;
-  # st.dMat is deliberately absent so it cannot ride along inside the closure.
-  # mget() also forces the formals, which a PSOCK worker could not resolve.
+  # Local fits are dispatched in contiguous chunks rather than one point at a time. 
+  #- each worker is handed only its own columns of st.dMat, so per-worker memory is 8*n^2/cores rather than 8*n^2 
+  #- the hat matrix is never materialised
   w_env <- list2env(mget(c("x", "y", "st.bw", "kernel", "adaptive", "hatmatrix",
                            "dp.n", "DM.given", "dp.locat", "rp.locat", "obs.tv",
                            "reg.tv", "p", "theta", "longlat", "lamda", "t.units", "ksi")),
@@ -711,14 +701,7 @@ st.dist <- function(dp.locat, rp.locat, obs.tv, reg.tv,focus=0, p=2, theta=0, lo
    }
    else
    {
-     # Built one column block at a time. Holding S, Tm, t(Tm), the two logical
-     # masks and the arithmetic temporaries all at n x n peaked at ~57 GB to
-     # produce an 8.6 GB result at n=34013 -- the reason full-size runs could
-     # not start. s.dMat and t.dMat only ever hold unique coordinates and
-     # unique time stamps (2918 and 12 respectively for a London LSOA month
-     # panel), so a block re-expands a small matrix rather than keeping a
-     # second copy of the large one. The arithmetic is left verbatim so the
-     # result is bit-identical to the unblocked version.
+     # one column block at a time. Holding S, Tm, t(Tm), the two logical masks and the arithmetic temporaries all at n x n s.dMat and t.dMat, o a block re-expands a small matrix rather than keeping a second copy of the large one. 
      blk  <- max(1L, min(n.rp, as.integer(ceiling(1e7 / max(1L, n.dp)))))
      rows <- seq_len(n.dp)
      for (.start in seq(1L, n.rp, by = blk))
@@ -733,9 +716,6 @@ st.dist <- function(dp.locat, rp.locat, obs.tv, reg.tv,focus=0, p=2, theta=0, lo
        else
        {
          S  <- s.dMat[coord.dp.idx, coord.dp.idx[cols], drop=FALSE]
-         # Tm[i,j] <- t.dMat[a[min(i,j)], a[max(i,j)]] reproduces the
-         # lower.tri(Tm) <- t(Tm)[lower.tri(Tm)] symmetrisation exactly,
-         # without ever forming the n x n transpose.
          I  <- matrix(rows, nrow=n.dp, ncol=m)
          Cc <- matrix(cols, nrow=n.dp, ncol=m, byrow=TRUE)
          a  <- uts.obv.idx

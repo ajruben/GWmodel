@@ -17,27 +17,10 @@
   if (.Platform$OS.type == "windows") {
     cl <- parallel::makePSOCKcluster(cores)
     on.exit(parallel::stopCluster(cl), add = TRUE)
-    # library(), not requireNamespace(): the workers need GWmodel's exported
-    # functions (gw.weight, gw.dist, ...) on their search path, and loading a
-    # namespace without attaching it does not put them there.
     parallel::clusterEvalQ(cl, { suppressPackageStartupMessages(library(GWmodel)) })
-    # parLapply serialises fit_fn together with its enclosing environment, so
-    # x, y, st.dMat etc. travel to the workers on their own. What does NOT
-    # travel is an argument still held as an unforced promise: it points at
-    # the caller's environment (often the global env), which a worker does
-    # not have -- hence "object 'use_adaptive_bw' not found". Forcing each
-    # binding here caches the value in the frame so serialisation carries it.
-    # Forcing in place rather than clusterExport()ing the frame keeps a
-    # single copy per worker; st.dMat alone is 8*n^2 bytes, so shipping it
-    # twice is what exhausts memory on large fits. try() skips formals that
-    # were never supplied (e.g. regression.points, which gtwr() only ever
-    # tests with missing()) -- those have no value to send.
     fn_env <- environment(fit_fn)
     for (.v in ls(fn_env, all.names = TRUE))
       try(get(.v, envir = fn_env), silent = TRUE)
-    # The patched GWmodel R files are sys.source()d into the master's global
-    # env rather than loaded from the package, and a worker's global env
-    # starts empty, so those helpers must be shipped explicitly.
     def_env <- parent.env(fn_env)
     helpers <- ls(def_env, all.names = TRUE)
     helpers <- helpers[startsWith(helpers, ".gtwr_")]
@@ -51,8 +34,7 @@
 # Chunked variant of the above. chunk_fn(idx, dcols) fits a contiguous block
 # of regression points; slice_fn(idx) produces just the columns of the
 # distance matrix that block needs, so a worker never holds the whole 8*n^2
-# matrix. chunk_fn is expected to carry an environment free of large objects
-# (see gtwr()), otherwise the closure would drag them along regardless.
+# matrix.
 .gtwr_dispatch_chunks <- function(chunk_fn, n, cores, verbose, slice_fn)
 {
   cores <- as.integer(cores)
@@ -83,15 +65,6 @@
     helpers <- helpers[startsWith(helpers, ".gtwr_")]
     if (length(helpers))
       parallel::clusterExport(cl, varlist = helpers, envir = def_env)
-    # Ship each worker its slice one at a time and let the master drop its
-    # copy immediately. Building the full list of slices up front (as
-    # clusterMap requires) would hold a second complete n x n matrix on the
-    # master -- 9.3 GB at n=34013, which is what tipped the full-size fit
-    # over. This keeps the master to st.dMat plus a single chunk.
-    # These setters are re-parented to the global env on purpose. Defined
-    # inline they would close over THIS frame, which holds slice_fn, whose own
-    # environment is gtwr()'s frame containing st.dMat -- so every send would
-    # serialise the entire matrix again, exactly what the chunking avoids.
     put_fn    <- function(f) assign(".gtwr_chunk_fn", f, envir = globalenv())
     put_chunk <- function(ix, sl) {
       assign(".gtwr_idx",   ix, envir = globalenv())
