@@ -1,4 +1,4 @@
-# GWmodel — vectorised, blocked, parallel GTWR
+# GWmodel , vectorised, blocked, parallel GTWR
 
 A fork of the CRAN package [GWmodel](https://cran.r-project.org/package=GWmodel),
 built on release **2.4-1**. Same package name, same `library(GWmodel)`; the
@@ -14,7 +14,7 @@ all above roughly 14,000 rows.
 | | CRAN 2.4-1 | Here |
 |---|---|---|
 | `st.dist` | six nested loops, cell by cell | vectorised, evaluated in column blocks |
-| Unique-coordinate deduplication | absent | restored — 65 MB of lookups rather than an 8.6 GB expansion |
+| Unique-coordinate deduplication | absent | restored , 65 MB of lookups rather than an 8.6 GB expansion |
 | `Q = (I−S)′(I−S)` | assembled in full, O(n³) | closed forms, O(n²) |
 | Hat matrix `S` | materialised n×n | reductions accumulated per chunk |
 | `gtwr()` parallelism | none; serial `for (i in 1:rp.n)` | `cores` argument, fork or PSOCK |
@@ -23,14 +23,14 @@ all above roughly 14,000 rows.
 `bw.gtwr.R` in CRAN 2.4-1 calls `st.dist()` as `longlat = F, lamda = longlat`, so
 `lamda` receives `FALSE` (zero) instead of its configured value. Since `lamda`
 sets the spatial-versus-temporal mix, bandwidth selection weights distance
-incorrectly whenever no distance matrix is supplied — with no error or warning.
+incorrectly whenever no distance matrix is supplied , with no error or warning.
 
 ## Verification
 
 Every change is checked against reference fits rather than a tolerance. `st.dist`
 output is bit-identical to the pre-optimisation implementation
 (checksum `76668926238.3127899170` at n=4,000), and the reference GTWR fit
-reproduces to 13 significant figures — the residue is upstream's rewrite of the
+reproduces to 13 significant figures , the residue is upstream's rewrite of the
 weighted least squares in `GWmodel.cpp`, which replaces an explicit `inv(xtwx)`
 with a solve.
 
@@ -54,7 +54,7 @@ This fork is a mix of my own work and AI-assisted work. The split:
 **Mine, without AI**
 
 - Identifying the GTWR performance bottleneck (2025).
-- The original refactor from nested loops to vectorised arithmetic — the
+- The original refactor from nested loops to vectorised arithmetic , the
   approach, and the first working implementation.
 - Benchmarking and the equivalence tests (handover to AI at later point)
 
