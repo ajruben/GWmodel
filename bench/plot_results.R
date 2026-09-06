@@ -65,6 +65,70 @@ legend("topleft",
        pch = c(1, 19, 1, 19), lty = c(2, 1, 2, 1), lwd = 2, bty = "n", cex = 0.85)
 par(op); dev.off()
 
+# ---- peak heap ------------------------------------------------------------
+if (!is.null(st_df$old_peak_mb)) {
+  png(file.path(plot_dir, "st_dist_memory.png"),
+      width = 900, height = 560, res = 140)
+  op <- par(mar = c(4.5, 4.5, 3, 1), mgp = c(2.6, 0.8, 0))
+  ylim <- range(c(st_df$old_peak_mb, st_df$new_peak_mb)) * c(0.8, 1.5)
+  plot(NA, xlim = range(st_df$n) * c(0.9, 1.6), ylim = ylim, log = "xy",
+       xlab = "n (matrix side)", ylab = "peak R heap (MB)",
+       main = "st.dist peak memory")
+  grid(col = "grey85", lty = 1)
+  for (m in modes) {
+    sub <- st_df[st_df$mode == m, ]
+    lines(sub$n, sub$old_peak_mb, type = "b", pch = 1,  lty = 2, lwd = 2, col = cols[m])
+    lines(sub$n, sub$new_peak_mb, type = "b", pch = 19, lty = 1, lwd = 2, col = cols[m])
+  }
+  # final values go in the legend: at the right edge all four series
+  # converge and in-plot labels collide
+  fin <- function(m, col) {
+    sub <- st_df[st_df$mode == m, ]
+    sub[[col]][nrow(sub)] / 1024
+  }
+  legend("topleft",
+         legend = c(sprintf("rp.given master (%.1f GB at n=%d)", fin("rp.given","old_peak_mb"), max(st_df$n)),
+                    sprintf("rp.given vectorized (%.1f GB)", fin("rp.given","new_peak_mb")),
+                    sprintf("symmetric master (%.1f GB)", fin("symmetric","old_peak_mb")),
+                    sprintf("symmetric vectorized (%.1f GB)", fin("symmetric","new_peak_mb"))),
+         col = c(cols["rp.given"], cols["rp.given"], cols["symmetric"], cols["symmetric"]),
+         pch = c(1, 19, 1, 19), lty = c(2, 1, 2, 1), lwd = 2, bty = "n", cex = 0.85)
+  par(op); dev.off()
+}
+
+# ---- mode comparison, normalised by work ----------------------------------
+# Dividing by n^2 removes the quadratic growth, so what is left is the cost per
+# output cell. That is what makes the two branches comparable: the master
+# symmetric loop only walks the upper triangle, so it does about half the work
+# per call, while the vectorised symmetric path touches the full n^2 and then
+# symmetrises. Hence the lower speedup for symmetric despite similar wall time.
+png(file.path(plot_dir, "st_dist_modes.png"),
+    width = 900, height = 560, res = 140)
+op <- par(mar = c(4.5, 4.8, 3, 1), mgp = c(2.8, 0.8, 0))
+st_df$old_ns <- st_df$old_median_s / (st_df$n^2) * 1e9
+st_df$new_ns <- st_df$new_median_s / (st_df$n^2) * 1e9
+ylim <- range(c(st_df$old_ns, st_df$new_ns)) * c(0.7, 1.5)
+plot(NA, xlim = range(st_df$n) * c(0.9, 1.6), ylim = ylim, log = "xy",
+     xlab = "n (matrix side)", ylab = "time per output cell (ns)",
+     main = "st.dist cost per cell: rp.given vs symmetric")
+grid(col = "grey85", lty = 1)
+for (m in modes) {
+  sub <- st_df[st_df$mode == m, ]
+  lines(sub$n, sub$old_ns, type = "b", pch = 1,  lty = 2, lwd = 2, col = cols[m])
+  lines(sub$n, sub$new_ns, type = "b", pch = 19, lty = 1, lwd = 2, col = cols[m])
+  j <- nrow(sub)
+  text(sub$n[j], sub$old_ns[j], sprintf("%.0f ns", sub$old_ns[j]),
+       pos = 4, offset = 0.4, cex = 0.68, col = cols[m])
+  text(sub$n[j], sub$new_ns[j], sprintf("%.1f ns", sub$new_ns[j]),
+       pos = 4, offset = 0.4, cex = 0.68, col = cols[m])
+}
+legend("bottomleft",
+       legend = c("rp.given master", "rp.given vectorized",
+                  "symmetric master", "symmetric vectorized"),
+       col = c(cols["rp.given"], cols["rp.given"], cols["symmetric"], cols["symmetric"]),
+       pch = c(1, 19, 1, 19), lty = c(2, 1, 2, 1), lwd = 2, bty = "n", cex = 0.8)
+par(op); dev.off()
+
 help_df <- df[!(df$mode %in% c("rp.given", "symmetric")), ]
 if (nrow(help_df) > 0) {
   png(file.path(plot_dir, "helpers_speedup.png"),

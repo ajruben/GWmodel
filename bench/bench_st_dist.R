@@ -31,11 +31,11 @@ make_case <- function(n_dp, n_rp, seed = 1L) {
   reg.tv <- as.numeric(sample.int(1e6, n_rp))
   ucoord_dp <- get.uloat(dp)[[1]]
   ucoord_rp <- get.uloat(rp)[[1]]
-  s.dMat <- as.matrix(dist(rbind(ucoord_dp, ucoord_rp)))[
-    seq_len(nrow(ucoord_dp)),
-    nrow(ucoord_dp) + seq_len(nrow(ucoord_rp)),
-    drop = FALSE
-  ]
+  # direct cross-distance: dist(rbind(dp, rp)) would materialise a
+  # (n_dp + n_rp)^2 matrix just to discard three quarters of it, which
+  # becomes the binding constraint well before st.dist itself does.
+  s.dMat <- sqrt(pmax(outer(rowSums(ucoord_dp^2), rowSums(ucoord_rp^2), "+") -
+                      2 * tcrossprod(ucoord_dp, ucoord_rp), 0))
   uts_obs <- get.ts(obs.tv)[[1]]
   uts_reg <- get.ts(reg.tv)[[1]]
   t.dMat  <- ti.distm(uts_obs, uts_reg, units = "auto")
@@ -48,20 +48,24 @@ make_case_sym <- function(n, seed = 1L) {
   dp <- matrix(runif(2 * n), ncol = 2)
   obs.tv <- as.numeric(sample.int(1e6, n))
   ucoord_dp <- get.uloat(dp)[[1]]
-  s.dMat <- as.matrix(dist(ucoord_dp))
+  s.dMat <- sqrt(pmax(outer(rowSums(ucoord_dp^2), rowSums(ucoord_dp^2), "+") -
+                      2 * tcrossprod(ucoord_dp), 0)) 
   uts_obs <- get.ts(obs.tv)[[1]]
   t.dMat  <- ti.distm(uts_obs, units = "auto")
   list(dp = dp, obs = obs.tv, s.dMat = s.dMat, t.dMat = t.dMat)
 }
 
+# Returns times plus the peak heap R reported while running them, so the
+# memory cost of each implementation is visible alongside the speed.
 time_reps <- function(expr, reps) {
-  gc(verbose = FALSE)
+  gc(verbose = FALSE, reset = TRUE)
   t <- numeric(reps)
   for (k in seq_len(reps)) {
     t0 <- Sys.time()
     force(expr())
     t[k] <- as.numeric(difftime(Sys.time(), t0, units = "secs"))
   }
+  attr(t, "peak_mb") <- sum(gc()[, 6])
   t
 }
 
@@ -79,6 +83,7 @@ bench_rp_given <- function(n, reps, lamda = 0.3, ksi = 0.2) {
   told <- time_reps(f_old, reps_old)
   tnew <- time_reps(f_new, reps)
   list(n = n, mode = "rp.given", equal = ok,
+       old_peak_mb = attr(told, "peak_mb"), new_peak_mb = attr(tnew, "peak_mb"),
        old_median = median(told), new_median = median(tnew),
        old_min = min(told), new_min = min(tnew),
        reps_old = reps_old, reps_new = reps)
@@ -98,6 +103,7 @@ bench_sym <- function(n, reps, lamda = 0.3, ksi = 0.2) {
   told <- time_reps(f_old, reps_old)
   tnew <- time_reps(f_new, reps)
   list(n = n, mode = "symmetric", equal = ok,
+       old_peak_mb = attr(told, "peak_mb"), new_peak_mb = attr(tnew, "peak_mb"),
        old_median = median(told), new_median = median(tnew),
        old_min = min(told), new_min = min(tnew),
        reps_old = reps_old, reps_new = reps)
@@ -111,8 +117,8 @@ fmt_time <- function(s) {
 
 # Sizes are capped by the nested-loop side: at n=8000 one master call is
 # several minutes, so it gets a single rep while the vectorised side keeps 2-3.
-sizes  <- c(100, 300, 1000, 2000, 4000, 8000)
-reps_n <- c(20,  10,  5,    3,    3,    2)
+sizes  <- c(100, 300, 1000, 2000, 4000, 8000, 12000, 16000)
+reps_n <- c(20,  10,  5,    3,    3,    2,    1,     1)
 
 results <- list()
 for (i in seq_along(sizes)) {
@@ -128,6 +134,7 @@ bench_helper <- function(label, f_old, f_new, reps) {
   tnew <- time_reps(f_new, reps)
   a <- f_old(); b <- f_new()
   list(mode = label, n = NA_integer_,
+       old_peak_mb = attr(told, "peak_mb"), new_peak_mb = attr(tnew, "peak_mb"),
        equal = isTRUE(all.equal(a, b, tolerance = 1e-10)),
        old_median = median(told), new_median = median(tnew),
        old_min = min(told), new_min = min(tnew),
@@ -170,6 +177,7 @@ cat("[helper get.uloat]\n")
 df <- do.call(rbind, lapply(results, function(r) {
   data.frame(mode = r$mode, n = r$n,
              equal = r$equal,
+             old_peak_mb = r$old_peak_mb, new_peak_mb = r$new_peak_mb,
              old_median_s = r$old_median,
              new_median_s = r$new_median,
              old_min_s    = r$old_min,
