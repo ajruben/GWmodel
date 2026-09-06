@@ -9,3 +9,6 @@ bench/results.rds
 bench/parallel_results.rds
 bench/plots/__pycache__/
 tests/__pycache__/
+src/*.o
+src/*.dll
+src/*.so
