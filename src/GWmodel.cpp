@@ -421,14 +421,16 @@ vec gw_weight_vec(vec vdist, double bw, int kernel, bool adaptive)
   int n = vdist.n_elem;
   vec wv(n, fill::zeros);
   if (adaptive) {
+    // fixbw does not depend on i: sorting inside the loop made this O(n^2 log n).
+    // gw_weight_mat already hoists the equivalent sort out of its inner loop.
+    double dn = bw / n, fixbw = 0;
+    if (dn <= 1) {
+      vec svdist = sort(vdist);
+      fixbw = svdist(int(bw) - 1);
+    } else {
+      fixbw = dn * max(vdist);
+    }
     for (int i = 0; i < n; i++) {
-      double dn = bw / n, fixbw = 0;
-      if (dn <= 1) {
-        vec svdist = sort(vdist);
-        fixbw = svdist(int(bw) - 1);
-      } else {
-        fixbw = dn * max(vdist);
-      }
       wv(i) = (*kerf)(vdist(i), fixbw);
     }
   } else {
