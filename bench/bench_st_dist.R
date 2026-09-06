@@ -109,8 +109,10 @@ fmt_time <- function(s) {
   else sprintf("%.2f s", s)
 }
 
-sizes  <- c(100, 300, 1000, 2000)
-reps_n <- c(20,  10,  5,    3)
+# Sizes are capped by the nested-loop side: at n=8000 one master call is
+# several minutes, so it gets a single rep while the vectorised side keeps 2-3.
+sizes  <- c(100, 300, 1000, 2000, 4000, 8000)
+reps_n <- c(20,  10,  5,    3,    3,    2)
 
 results <- list()
 for (i in seq_along(sizes)) {
@@ -183,87 +185,3 @@ cat("\n=== RESULTS ===\n")
 print(df, row.names = FALSE)
 
 saveRDS(df, file.path(repo, "bench", "results.rds"))
-
-md_path <- file.path(repo, "bench", "BENCHMARK.md")
-r_ver   <- paste(R.version$major, R.version$minor, sep = ".")
-sysinfo <- Sys.info()
-
-is_helper <- is.na(df$n)
-df_core   <- df[!is_helper, , drop = FALSE]
-df_help   <- df[ is_helper, , drop = FALSE]
-
-fmt_row <- function(r) {
-  n_cell <- if (is.na(r$n)) "—" else as.character(r$n)
-  sprintf("| %s | %s | %s | %s | %.1f× | %s | %d / %d |",
-          r$mode, n_cell, fmt_time(r$old_median), fmt_time(r$new_median),
-          r$speedup_median, ifelse(r$equal, "yes", "**NO**"),
-          r$reps_old, r$reps_new)
-}
-
-lines <- c(
-  "# GTWR vectorization benchmark",
-  "",
-  sprintf("R %s on %s %s (%s). Timings are `Sys.time()` deltas, median over reps. Old = master `R/gtwr.R` snapshot; new = current `R/gtwr.r` on `vectorize-gtwr`.",
-          r_ver, sysinfo["sysname"], sysinfo["release"], sysinfo["machine"]),
-  "",
-  "## What changed",
-  "",
-  "- `st.dist()` `focus == 0` branches (both `rp.given` and symmetric): the two nested `for` loops became one vectorized matrix expression on a boolean-mask subset.",
-  "- `st.dist()` `focus > 0` branches: same idea, reduced to a single vector.",
-  "- `ti.distv()`: dropped the `c()`-growth loop; single vectorized `ti.dist()` call plus a mask for future observations.",
-  "- `ti.distm()`: kept the outer column loop (which is cheap) now that `ti.distv` is vector-native.",
-  "- `get.ts()`: replaced buggy `as.factor()` / `format()` round-trip with `sort(unique())` + `match()`. Also fixes a latent precision bug — see below.",
-  "- `get.uloat()`: replaced the O(n²) `which()` scan with a single `match()` on paste-keys.",
-  "",
-  "## st.dist (called from `gtwr()` and `bw.gtwr()` per bandwidth candidate)",
-  "",
-  "| Mode | n | old median | new median | speedup | equal | reps (old/new) |",
-  "|---|---:|---:|---:|---:|:---:|:---:|"
-)
-for (i in seq_len(nrow(df_core))) lines <- c(lines, fmt_row(df_core[i, ]))
-
-lines <- c(lines,
-  "",
-  "## Helpers (called once per bandwidth trial and once per fit)",
-  "",
-  "| Function | n | old median | new median | speedup | equal | reps (old/new) |",
-  "|---|---:|---:|---:|---:|:---:|:---:|"
-)
-for (i in seq_len(nrow(df_help))) lines <- c(lines, fmt_row(df_help[i, ]))
-
-lines <- c(lines,
-  "",
-  "> `get.ts` shows `equal = **NO**` intentionally. The old implementation truncates full-precision numeric time stamps via `as.factor()` → `format()` (default `getOption(\"digits\") = 7`), so `which(ts == i)` matches fewer entries than there are inputs and `index` comes back short. The new implementation returns a correct index of length `length(tv)`. See `tests/test_gtwr_equivalence.R` for the round-trip assertions.",
-  "",
-  "## Notes on the shape of the speedups",
-  "",
-  "- The `st.dist` speedup plateaus (~30× for `rp.given`, ~10–12× for symmetric at n ≥ 1000) once R interpreter overhead per iteration dominates the old path. Below n=100 setup costs on both sides pull the ratio down.",
-  "- The symmetric branch's ratio is lower than `rp.given` because the old code only iterated the upper triangle (~n²/2) while the new code touches the full n² before masking. One vectorized pass over n² still beats n²/2 R-level iterations by ~10×.",
-  "- Helper speedups (`ti.distv` ~800×, `get.uloat` ~30×, `get.ts` ~280×) reflect that the old code paid `c()`-growth allocation on every step. Under `gtwr()` these are called once per fit, so the wall-clock gain shows up mostly at large n or during bandwidth search where they run inside a golden-section loop.",
-  "- At n ≥ 1000 the old `st.dist` was timed with a single rep — one run takes 0.5–2.2 s and repeated timing added little signal; new-side medians are over 3–5 reps.",
-  "- Numbers exclude `s.dMat` / `t.dMat` construction, which is identical on both sides.",
-  "",
-  "## Plots",
-  "",
-  "Rendered by `bench/plot_results.R` after this script writes `bench/results.rds`.",
-  "",
-  "- `bench/plots/st_dist_speedup.png` — speedup vs n for `st.dist`, one line per branch.",
-  "- `bench/plots/st_dist_wall_time.png` — log-log wall time, master vs vectorized, both branches.",
-  "- `bench/plots/helpers_speedup.png` — bar chart of helper speedups (`ti.distv`, `get.ts`, `get.uloat`).",
-  "- `bench/plots/parallel_speedup.png` — `.gtwr_dispatch` scaling from `bench/bench_parallel_synthetic.R` (no package install needed). The end-to-end `bench/bench_parallel.R` needs the compiled `GWmodel` package installed (which needs system GDAL/PROJ/GEOS); if you have those, it overwrites `parallel_results.rds` with real gtwr numbers.",
-  "",
-  "## Correctness",
-  "",
-  "See `tests/test_gtwr_equivalence.R` — 53 assertions across `st.dist` (all branches, master parity), helper round-trip properties, and the AICc guard. Runs in a couple of seconds via `Rscript tests/test_gtwr_equivalence.R`.",
-  "",
-  "## Reproduce",
-  "",
-  "```bash",
-  "Rscript bench/bench_st_dist.R      # this file — writes bench/results.rds",
-  "Rscript bench/bench_parallel.R     # optional — needs GWmodel + sp installed",
-  "Rscript bench/plot_results.R       # renders PNGs into bench/plots/",
-  "Rscript tests/test_gtwr_equivalence.R",
-  "```"
-)
-writeLines(lines, md_path)
-cat(sprintf("\nWrote %s\n", md_path))

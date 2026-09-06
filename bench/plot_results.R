@@ -20,7 +20,7 @@ op <- par(mar = c(4.5, 4.5, 3, 1), mgp = c(2.6, 0.8, 0))
 modes <- unique(st_df$mode)
 cols  <- c("rp.given" = "#1f77b4", "symmetric" = "#d62728")
 ylim  <- c(1, max(st_df$speedup_median) * 1.15)
-plot(NA, xlim = range(st_df$n), ylim = ylim, log = "x",
+plot(NA, xlim = range(st_df$n) * c(0.9, 1.45), ylim = ylim, log = "x",
      xlab = "n (matrix side)", ylab = "speedup vs master (×)",
      main = "st.dist: vectorized vs nested-loop master")
 grid(col = "grey85", lty = 1)
@@ -40,14 +40,23 @@ png(file.path(plot_dir, "st_dist_wall_time.png"),
     width = 900, height = 560, res = 140)
 op <- par(mar = c(4.5, 4.5, 3, 1), mgp = c(2.6, 0.8, 0))
 ylim <- range(c(st_df$old_median_s, st_df$new_median_s))
-plot(NA, xlim = range(st_df$n), ylim = ylim, log = "xy",
+plot(NA, xlim = range(st_df$n) * c(0.9, 1.6), ylim = ylim * c(0.6, 1.7), log = "xy",
      xlab = "n (matrix side)", ylab = "median wall time (s)",
-     main = "st.dist wall time")
+     main = "st.dist wall time (median, log-log)")
 grid(col = "grey85", lty = 1)
+fmt_t <- function(s) ifelse(s < 1e-3, sprintf("%.0fus", s*1e6),
+                     ifelse(s < 1,    sprintf("%.0fms", s*1e3),
+                                      sprintf("%.1fs", s)))
 for (m in modes) {
   sub <- st_df[st_df$mode == m, ]
   lines(sub$n, sub$old_median_s, type = "b", pch = 1, lty = 2, lwd = 2, col = cols[m])
   lines(sub$n, sub$new_median_s, type = "b", pch = 19, lty = 1, lwd = 2, col = cols[m])
+  # raw times on the endpoints of each series, so the axis is not the only source
+  ix <- c(1L, nrow(sub))
+  text(sub$n[ix], sub$old_median_s[ix], fmt_t(sub$old_median_s[ix]),
+       pos = c(3, 4)[seq_along(ix)], offset = 0.45, cex = 0.68, col = cols[m])
+  text(sub$n[ix], sub$new_median_s[ix], fmt_t(sub$new_median_s[ix]),
+       pos = c(1, 4)[seq_along(ix)], offset = 0.45, cex = 0.68, col = cols[m])
 }
 legend("topleft",
        legend = c("rp.given master", "rp.given vectorized",

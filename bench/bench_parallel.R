@@ -72,27 +72,3 @@ for (i in seq_along(sizes)) {
 pdf_df <- do.call(rbind, results)
 print(pdf_df, row.names = FALSE)
 saveRDS(pdf_df, file.path(repo, "bench", "parallel_results.rds"))
-
-md <- file.path(repo, "bench", "BENCHMARK_PARALLEL.md")
-sysinfo <- Sys.info()
-lines <- c(
-  "# gtwr_parallel benchmark",
-  "",
-  sprintf("R %s.%s on %s %s (%s)", R.version$major, R.version$minor,
-          sysinfo["sysname"], sysinfo["release"], sysinfo["machine"]),
-  sprintf("Cores detected (physical): %d", parallel::detectCores(logical = FALSE)),
-  sprintf("Cluster type: %s", if (.Platform$OS.type == "unix") "fork" else "psock"),
-  "",
-  "Serial baseline is `gtwr()` (still with the vectorized `st.dist`).",
-  "",
-  "| n | cores | serial (s) | parallel (s) | speedup | reps |",
-  "|---:|---:|---:|---:|---:|---:|"
-)
-for (i in seq_len(nrow(pdf_df))) {
-  r <- pdf_df[i, ]
-  lines <- c(lines, sprintf("| %d | %d | %.3f | %.3f | %.2f× | %d |",
-                            r$n, r$cores, r$serial_median_s, r$parallel_median_s,
-                            r$speedup, r$reps))
-}
-writeLines(lines, md)
-cat("Wrote", md, "\n")

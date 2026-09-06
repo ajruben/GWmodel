@@ -64,33 +64,3 @@ for (n in sizes) {
 pdf_df <- do.call(rbind, results)
 print(pdf_df, row.names = FALSE)
 saveRDS(pdf_df, file.path(repo, "bench", "parallel_results.rds"))
-
-md <- file.path(repo, "bench", "BENCHMARK_PARALLEL.md")
-sysinfo <- Sys.info()
-lines <- c(
-  "# .gtwr_dispatch parallel-scaling benchmark (synthetic)",
-  "",
-  sprintf("R %s.%s on %s %s (%s)", R.version$major, R.version$minor,
-          sysinfo["sysname"], sysinfo["release"], sysinfo["machine"]),
-  sprintf("Cores detected (physical): %d", parallel::detectCores(logical = FALSE)),
-  sprintf("Cluster type: %s", if (.Platform$OS.type == "unix") "fork (mclapply)" else "psock (parLapply)"),
-  "",
-  paste("Workload per point: small `crossprod` + `solve` at p =", p,
-        "and", n_ctx, "context observations, ~equivalent to the arithmetic that `gw_reg` does at each regression point without requiring the compiled GWmodel package.",
-        "Compares `.gtwr_dispatch(..., cores = 1)` (serial) vs `cores = k`."),
-  "",
-  "| n | cores | serial (s) | parallel (s) | speedup | reps |",
-  "|---:|---:|---:|---:|---:|---:|"
-)
-for (i in seq_len(nrow(pdf_df))) {
-  r <- pdf_df[i, ]
-  lines <- c(lines, sprintf("| %d | %d | %.3f | %.3f | %.2f× | %d |",
-                            r$n, r$cores, r$serial_median_s, r$parallel_median_s,
-                            r$speedup, r$reps))
-}
-lines <- c(lines,
-  "",
-  "> The end-to-end `gtwr()` bench (`bench/bench_parallel.R`) needs the compiled `GWmodel` package installed (which in turn needs system GDAL/PROJ/GEOS). If you have those, run it and it will overwrite `parallel_results.rds` with real end-to-end numbers.",
-  "")
-writeLines(lines, md)
-cat("Wrote", md, "\n")
